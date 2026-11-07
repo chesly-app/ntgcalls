@@ -67,7 +67,7 @@ its dSYM (`-debug-symbols`), an `Info.plist`, a privacy manifest and the licence
 | `ntgcalls/include/ntgcalls/utils/hardware_info.hpp`, `ntgcalls/src/utils/hardware_info.cpp` | iOS uses the macOS CPU accounting |
 | `ntgcalls/src/instances/p2p_call.cpp` | no key fingerprint in the iOS log |
 | new `ios/`, `.github/workflows/ios.yml` | build scripts, checks, gate G1 and the workflow |
-| `README.md`, new `IOS_PORT.md` | the notice that this is a modified version |
+| `README.md`, new `IOS_PORT.md` | the fork notice with upstream credit, the port's status, what works and how to build it |
 
 ## Building
 

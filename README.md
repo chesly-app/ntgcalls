@@ -1,5 +1,54 @@
-> **This is a fork.** The `ios-port` branch is a modified version of ntgcalls with an iOS port,
-> made by Chesly in November 2026 under the same licence. See [`IOS_PORT.md`](IOS_PORT.md).
+> **This is a fork of [NTgCalls](https://github.com/pytgcalls/ntgcalls)**, created by
+> [Laky-64](https://github.com/Laky-64) and the [pytgcalls](https://github.com/pytgcalls)
+> contributors and licensed under the
+> [GNU Lesser General Public License v3.0](https://github.com/pytgcalls/ntgcalls/blob/master/LICENSE)
+> (`LICENSE`). NTgCalls is their work; everything below the line is the upstream README.
+>
+> iOS port of ntgcalls, maintained by Chesly (https://chesly.app), the app for all your
+> messengers in one place.
+
+## iOS port
+
+The `ios-port` branch builds ntgcalls 3.0.6 for iOS as `ntgcalls.xcframework`: arm64 iPhone
+devices and the arm64 iPhone simulator. It is a modified version of NTgCalls under the same
+licence, LGPL-3.0. [`IOS_PORT.md`](IOS_PORT.md) lists every change to upstream files.
+
+### Status
+
+**Work in progress.** No call has run on a real iPhone yet.
+
+### What works
+
+- Both slices build from pytgcalls' unmodified WebRTC `m157.8103.4.0` iOS archive. The
+  simulator slice links the same objects, retagged as simulator objects.
+- Each slice exports only the C API (`ntg_*`, the upstream `ntgcalls.h` unchanged), has no
+  Objective-C class and no `AVAudioSession` import, and carries its dSYM and a privacy manifest.
+- On the iPhone simulator, in CI, two ntgcalls instances complete the key exchange, connect
+  peer to peer and carry audio both ways for 60 seconds, in one process with a second WebRTC
+  build. Both ends show the same four emojis.
+- Media goes through the external source: the app supplies and plays the PCM frames.
+- On iOS, ICE candidates on local-network addresses are filtered out by default, so most calls
+  between two devices on one network do not use it directly. A custom parameter turns this off
+  per call.
+
+Not yet exercised: calls on a device, video, reflectors and TURN servers, and Telegram's own
+signaling.
+
+### Building for iOS
+
+The workflow `.github/workflows/ios.yml` builds both slices on a GitHub macOS runner, checks
+them, and assembles the xcframework. By hand, on a Mac with Xcode, CMake and Ninja:
+
+```sh
+ios/scripts/build_deps.sh /tmp/deps.tar.gz      # FFmpeg and Boost.JSON for both slices
+mkdir -p /tmp/deps && tar -xzf /tmp/deps.tar.gz -C /tmp/deps
+ios/scripts/build_slice.sh iphoneos /tmp/deps /tmp/out
+ios/scripts/check_slice.sh iphoneos /tmp/out/iphoneos
+```
+
+[`IOS_PORT.md`](IOS_PORT.md) has the full steps, the checks and the design.
+
+---
 
 <img src="https://raw.githubusercontent.com/pytgcalls/ntgcalls/master/.github/images/banner.png" alt="pytgcalls logo" />
 <p align="center">
