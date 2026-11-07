@@ -6,12 +6,14 @@ import LiveKitWebRTC
 import XCTest
 
 final class CoexistenceTests: XCTestCase {
-    /// One store for the whole process: ntgcalls keeps logging after a test ends.
-    private static let logs: LogStore = {
-        let store = LogStore()
-        store.install()
-        return store
-    }()
+    /// One store for the whole process: ntgcalls can still log after a test ends.
+    private static let logs = LogStore()
+
+    /// ntgcalls drops the log callback when its last instance goes, so each test sets it again.
+    private func captureLogs() -> LogStore {
+        Self.logs.install()
+        return Self.logs
+    }
 
     /// Any 2048-bit modulus serves here: the test needs both ends to agree, not a safe prime.
     private let prime = [UInt8](repeating: 0xFF, count: 256)
@@ -71,7 +73,7 @@ final class CoexistenceTests: XCTestCase {
         print("ntgcalls \(engineVersion())")
         XCTAssertTrue(engineVersion().contains("+ios."))
 
-        let logs = Self.logs
+        let logs = captureLogs()
         let (caller, callee, fingerprint) = try exchangedPair()
 
         let callerEmojis = try caller.emojis()
@@ -121,7 +123,7 @@ final class CoexistenceTests: XCTestCase {
     /// The local network filter, on by default: the caller offers its local addresses, and the
     /// callee, the iPhone in this test, neither tries them nor offers its own, so no path exists.
     func testLocalAddressesStayOut() throws {
-        let logs = Self.logs
+        let logs = captureLogs()
         let (caller, callee, _) = try exchangedPair()
 
         try caller.connect(allowLocal: true)
