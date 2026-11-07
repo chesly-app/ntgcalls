@@ -10,10 +10,16 @@
 #include <rtc_base/time_utils.h>
 #include <wrtc/exceptions.hpp>
 #include <wrtc/interfaces/reflector_relay_port_factory.hpp>
+#ifdef IS_IOS
+#include <wrtc/utils/local_network.hpp>
+#endif
 
 namespace wrtc::interfaces {
     NativeConnection::NativeConnection(std::vector<models::RTCServer> rtc_servers, const bool enable_p2p, const bool is_outgoing, const utils::json& custom_parameters):
     custom_parameters_(custom_parameters),
+#ifdef IS_IOS
+    allow_local_addresses_(get_custom_parameter_bool("network_allow_local_addresses")),
+#endif
     is_outgoing_(is_outgoing),
     enable_p2p_(enable_p2p),
     rtc_servers_(std::move(rtc_servers)),
@@ -120,6 +126,12 @@ namespace wrtc::interfaces {
             if (!strong) {
                 return;
             }
+#ifdef IS_IOS
+            // iOS port: a LAN-only host address is never offered (utils/local_network.hpp).
+            if (!strong->allow_local_addresses_ && utils::is_local_gathered_candidate(candidate)) {
+                return;
+            }
+#endif
             strong->signaling_thread().PostTask([weak, candidate] {
                 const auto strong_signaling = std::static_pointer_cast<NativeConnection>(weak.lock());
                 if (!strong_signaling) {
@@ -414,6 +426,13 @@ namespace wrtc::interfaces {
             if (!strong) {
                 return;
             }
+#ifdef IS_IOS
+            // iOS port: a local address the peer offers is never tried (utils/local_network.hpp).
+            if (!strong->allow_local_addresses_ && utils::is_local_remote_candidate(candidate, strong->factory_->network_manager())) {
+                RTC_LOG(LS_INFO) << "Not adding a remote candidate on the local network";
+                return;
+            }
+#endif
             strong->transport_channel_->AddRemoteCandidate(candidate);
         });
     }

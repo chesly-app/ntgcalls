@@ -17,6 +17,12 @@ namespace wrtc::interfaces {
 
     class NativeConnection final: public NativeNetworkInterface {
         utils::json custom_parameters_;
+#ifdef IS_IOS
+        // iOS port: read once in the constructor. Reading it per candidate went through
+        // json::operator[], which inserts a missing key, on the network thread while the
+        // signaling thread reads the same object.
+        const bool allow_local_addresses_;
+#endif
         bool is_outgoing_, enable_p2p_;
         int64_t last_disconnected_timestamp_ = 0;
         std::vector<models::RTCServer> rtc_servers_;
