@@ -2,7 +2,7 @@
 // Created by Lauren on 04/11/24.
 //
 
-#ifndef IS_ANDROID
+#if !defined(IS_ANDROID) && !defined(IS_IOS) // iOS port: no OpenH264 on iOS
 #include <api/environment/environment_factory.h>
 #include <wrtc/video_factory/software/openh264/h264_decoder.hpp>
 #include <wrtc/video_factory/software/openh264/h264_encoder.hpp>

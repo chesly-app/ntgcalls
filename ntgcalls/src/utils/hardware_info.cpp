@@ -6,7 +6,7 @@
 
 #if defined(IS_LINUX) || defined(IS_ANDROID)
 #include <unistd.h>
-#elif IS_MACOS
+#elif defined(IS_MACOS) || defined(IS_IOS) // iOS port: same BSD calls as macOS
 #include <sys/resource.h>
 #elif IS_WINDOWS
 #include <cstring>
@@ -26,7 +26,7 @@ namespace ntgcalls::utils {
         GetProcessTimes(self, &ftime, &ftime, &fsys, &fuser);
         std::memcpy(&last_sys_cpu_, &fsys, sizeof(FILETIME));
         std::memcpy(&last_user_cpu_, &fuser, sizeof(FILETIME));
-#elif IS_MACOS
+#elif defined(IS_MACOS) || defined(IS_IOS)
         size_t len = sizeof(num_processors_);
         sysctlbyname("hw.ncpu", &num_processors_, &len, NULL, 0);
         struct rusage usage;
@@ -66,7 +66,7 @@ namespace ntgcalls::utils {
         last_cpu_ = now;
         last_user_cpu_ = user;
         last_sys_cpu_ = sys;
-#elif IS_MACOS
+#elif defined(IS_MACOS) || defined(IS_IOS)
         struct rusage usage;
         getrusage(RUSAGE_SELF, &usage);
         const clock_t now = (usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) * 1000000 + (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec);

@@ -62,7 +62,7 @@ namespace ntgcalls::media::devices {
             };
             return {DeviceInfo("Device Screen", metadata.dump())};
         }
-#else
+#elif !defined(IS_IOS) // iOS port: no desktop capture on iOS
         if (DesktopCapturerModule::is_supported()) {
             return DesktopCapturerModule::get_sources();
         }
@@ -71,7 +71,7 @@ namespace ntgcalls::media::devices {
     }
 
     std::vector<DeviceInfo> MediaDevice::get_camera_devices() {
-#if !defined(IS_ANDROID) && !defined(IS_MACOS)
+#if !defined(IS_ANDROID) && !defined(IS_MACOS) && !defined(IS_IOS) // iOS port: no camera module
         return CameraCapturerModule::get_sources();
 #elif IS_ANDROID
         if (JavaVideoCapturerModule::is_supported(false)) {
@@ -86,7 +86,7 @@ namespace ntgcalls::media::devices {
     }
 
     std::unique_ptr<io::BaseReader> MediaDevice::create_desktop_capture(const VideoDescription& desc, BaseSink* sink) {
-#ifndef IS_ANDROID
+#if !defined(IS_ANDROID) && !defined(IS_IOS) // iOS port: no desktop capture on iOS
         if (DesktopCapturerModule::is_supported()) {
             RTC_LOG(LS_INFO) << "Using DesktopCapturer module for input";
             return std::make_unique<DesktopCapturerModule>(desc, sink);
@@ -101,7 +101,7 @@ namespace ntgcalls::media::devices {
     }
 
     std::unique_ptr<io::BaseReader> MediaDevice::create_camera_capture(const VideoDescription& desc, BaseSink* sink) {
-#if !defined(IS_ANDROID) && !defined(IS_MACOS)
+#if !defined(IS_ANDROID) && !defined(IS_MACOS) && !defined(IS_IOS) // iOS port: no camera module
         RTC_LOG(LS_INFO) << "Using CameraCapturer module for input";
         return std::make_unique<CameraCapturerModule>(desc, sink);
 #elif IS_ANDROID

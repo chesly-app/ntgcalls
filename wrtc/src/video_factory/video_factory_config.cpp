@@ -5,7 +5,9 @@
 #ifndef IS_ANDROID
 #include <wrtc/video_factory/video_factory_config.hpp>
 #include <wrtc/video_factory/software/google/google.hpp>
+#ifndef IS_IOS // iOS port: no OpenH264 on iOS; VP8, VP9 and AV1 stay
 #include <wrtc/video_factory/software/openh264/openh264.hpp>
+#endif
 #include <wrtc/video_factory/software/vlc/vlc.hpp>
 
 namespace wrtc::video_factory {
@@ -19,9 +21,11 @@ namespace wrtc::video_factory {
         vlc::add_encoders(encoders);
         vlc::add_decoders(decoders);
 
+#ifndef IS_IOS
         // OpenH264 (Software, H264)
         openh264::add_encoders(encoders);
         openh264::add_decoders(decoders);
+#endif
 
         // NVCODEC (Hardware, VP8, VP9, H264)
         // TODO: @Lauren Add NVCODEC encoder-decoder when available

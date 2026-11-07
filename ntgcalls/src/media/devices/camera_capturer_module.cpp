@@ -2,7 +2,7 @@
 // Created by Lauren on 17/10/24.
 //
 
-#if !defined(IS_ANDROID) && !defined(IS_MACOS)
+#if !defined(IS_ANDROID) && !defined(IS_MACOS) && !defined(IS_IOS) // iOS port: camera frames arrive through the external source
 #include <libyuv/scale.h>
 #include <ntgcalls/exceptions.hpp>
 #include <ntgcalls/media/devices/camera_capturer_module.hpp>

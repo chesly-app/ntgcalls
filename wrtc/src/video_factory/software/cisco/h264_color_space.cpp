@@ -2,7 +2,7 @@
 // Created by Lauren on 06/11/24.
 //
 
-#ifndef IS_ANDROID
+#if !defined(IS_ANDROID) && !defined(IS_IOS) // iOS port: no OpenH264 on iOS
 #include <wrtc/video_factory/software/openh264/h264_color_space.hpp>
 
 namespace openh264 {

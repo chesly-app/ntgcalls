@@ -6,7 +6,7 @@
 
 #ifdef IS_WINDOWS
 #include <windows.h>
-#elif IS_MACOS
+#elif defined(IS_MACOS) || defined(IS_IOS) // iOS port: same BSD calls as macOS
 #include <sys/sysctl.h>
 #elif defined(IS_LINUX) || defined(IS_ANDROID)
 #include <sys/times.h>

@@ -4,6 +4,10 @@
 
 #include <wrtc/interfaces/media/audio_device_module.hpp>
 
+#ifdef IS_IOS
+#include <api/audio/create_audio_device_module.h>
+#endif
+
 namespace wrtc::interfaces::media {
     int32_t AudioDeviceModule::ActiveAudioLayer(AudioLayer* audio_layer) const {
         *audio_layer = kDummyAudio;
@@ -258,6 +262,16 @@ namespace wrtc::interfaces::media {
         return -1;
     }
 
+#if defined(WEBRTC_IOS)
+    int AudioDeviceModule::GetPlayoutAudioParameters(webrtc::AudioParameters* params) const {
+        return -1;
+    }
+
+    int AudioDeviceModule::GetRecordAudioParameters(webrtc::AudioParameters* params) const {
+        return -1;
+    }
+#endif
+
     void AudioDeviceModule::update_processing(const bool start) {
         if (start) {
             if (!process_thread_) {
@@ -328,3 +342,19 @@ namespace wrtc::interfaces::media {
         );
     }
 } // wrtc::interfaces::media
+
+#ifdef IS_IOS
+namespace webrtc {
+    // iOS port: the voice engine asks for a platform audio device only
+    // when it was given none (EnsureAudioDeviceModule), and PeerConnectionFactory always gives it
+    // the module above. Defining the factory here keeps the archive's own iOS audio device, and
+    // with it every ObjC class and AVAudioSession reference it carries, out of the link.
+    // Defined in this file so it sits in an object the link always loads, ahead of the archive.
+    absl_nullable scoped_refptr<AudioDeviceModule> CreateAudioDeviceModule(
+        const Environment& env,
+        AudioDeviceModule::AudioLayer audio_layer
+    ) {
+        return nullptr;
+    }
+} // webrtc
+#endif

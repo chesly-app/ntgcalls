@@ -4,7 +4,7 @@
 
 #pragma once
 
-#ifndef IS_ANDROID
+#if !defined(IS_ANDROID) && !defined(IS_IOS) // iOS port: no OpenH264 on iOS
 #include <api/video_codecs/video_decoder.h>
 #include <common_video/h264/h264_bitstream_parser.h>
 #include <common_video/include/video_frame_buffer_pool.h>
