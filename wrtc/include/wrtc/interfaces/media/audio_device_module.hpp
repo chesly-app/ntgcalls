@@ -150,6 +150,14 @@ namespace wrtc::interfaces::media {
         int32_t EnableBuiltInAGC(bool enable) override;
 
         int32_t EnableBuiltInNS(bool enable) override;
+
+#if defined(WEBRTC_IOS)
+        // iOS port (Chesly fork, 2026-11): pure virtual under WEBRTC_IOS. This module drives no
+        // platform audio, so it has no hardware parameters to report.
+        int GetPlayoutAudioParameters(webrtc::AudioParameters* params) const override;
+
+        int GetRecordAudioParameters(webrtc::AudioParameters* params) const override;
+#endif
     };
 
 } // wrtc::interfaces::media

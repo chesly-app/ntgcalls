@@ -2,7 +2,7 @@
 // Created by Lauren on 05/11/24.
 //
 
-#ifndef IS_ANDROID
+#if !defined(IS_ANDROID) && !defined(IS_IOS) // iOS port: no OpenH264 on iOS
 // ReSharper disable CppDFAUnusedValue
 #include <common_video/include/video_frame_buffer.h>
 #include <modules/video_coding/include/video_error_codes.h>

@@ -95,7 +95,12 @@ namespace ntgcalls::instances {
             throw CryptoError("Fingerprint mismatch");
         }
         key_ = auth_key;
+#ifdef IS_IOS
+        // iOS port: the key fingerprint stays out of the log, which an app may forward.
+        RTC_LOG(LS_INFO) << "Key exchanged";
+#else
         RTC_LOG(LS_INFO) << "Key exchanged, fingerprint: " << computed_fingerprint;
+#endif
 
         const auto& ga = ga_hash_ ? g_a_or_b : g_a_or_b_.value();
         bytes::binary fingerprint_data = computed_auth_key;

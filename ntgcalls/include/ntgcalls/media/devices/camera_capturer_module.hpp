@@ -4,7 +4,7 @@
 
 #pragma once
 
-#if !defined(IS_ANDROID) && !defined(IS_MACOS)
+#if !defined(IS_ANDROID) && !defined(IS_MACOS) && !defined(IS_IOS) // iOS port: camera frames arrive through the external source
 #include <api/video/video_frame.h>
 #include <api/video/video_sink_interface.h>
 #include <modules/video_capture/video_capture_factory.h>

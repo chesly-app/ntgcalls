@@ -4,7 +4,7 @@
 
 #pragma once
 
-#ifndef IS_ANDROID
+#if !defined(IS_ANDROID) && !defined(IS_IOS) // iOS port: no desktop capture on iOS
 #include <modules/desktop_capture/delegated_source_list_controller.h>
 #include <modules/desktop_capture/desktop_and_cursor_composer.h>
 #include <ntgcalls/io/base_reader.hpp>

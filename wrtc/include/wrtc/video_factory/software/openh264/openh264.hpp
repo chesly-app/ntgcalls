@@ -4,7 +4,7 @@
 
 #pragma once
 
-#ifndef IS_ANDROID
+#if !defined(IS_ANDROID) && !defined(IS_IOS) // iOS port: no OpenH264 on iOS
 #include <wrtc/video_factory/video_decoder_config.hpp>
 #include <wrtc/video_factory/video_encoder_config.hpp>
 

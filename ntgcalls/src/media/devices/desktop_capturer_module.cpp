@@ -2,7 +2,7 @@
 // Created by Lauren on 15/10/24.
 //
 
-#ifndef IS_ANDROID
+#if !defined(IS_ANDROID) && !defined(IS_IOS) // iOS port: no desktop capture on iOS
 #include <modules/desktop_capture/desktop_capturer_differ_wrapper.h>
 #include <ntgcalls/exceptions.hpp>
 #include <ntgcalls/media/video_sink.hpp>
