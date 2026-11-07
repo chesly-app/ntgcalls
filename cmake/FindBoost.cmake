@@ -13,7 +13,30 @@ if (ANDROID)
     set(BOOST_LIB_DIR ${BOOST_LIB_DIR}/${ANDROID_ABI})
 endif ()
 
-if (LINUX_ARM64)
+if (IOS)
+    # iOS port: pytgcalls/boost publishes no iOS build. Boost.JSON, the only compiled part used
+    # here, comes per slice from the iOS deps bundle (ios/deps), built against the same libc++
+    # headers as this library. Boost::process stays off, as on Android: iOS cannot spawn.
+    if (NOT NTG_IOS_DEPS)
+        message(FATAL_ERROR "iOS needs -DNTG_IOS_DEPS=<dir> with boost/ and ffmpeg/ for this slice")
+    endif ()
+    set(BOOST_SRC ${NTG_IOS_DEPS}/boost)
+    set(BOOST_LIB_DIR ${BOOST_SRC}/lib)
+    if (NOT EXISTS ${BOOST_LIB_DIR}/${BOOST_JSON_LIB})
+        message(FATAL_ERROR "Missing ${BOOST_LIB_DIR}/${BOOST_JSON_LIB}")
+    endif ()
+    add_compile_definitions(BOOST_ALL_NO_LIB)
+    message(STATUS "boost (iOS deps bundle) ${BOOST_SRC}")
+    if (NOT TARGET Boost::json)
+        add_library(Boost::json STATIC IMPORTED GLOBAL)
+        set_target_properties(Boost::json PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${BOOST_SRC}/include"
+            IMPORTED_LINK_INTERFACE_LANGUAGES CXX
+            IMPORTED_LOCATION "${BOOST_LIB_DIR}/${BOOST_JSON_LIB}"
+        )
+    endif ()
+    return()
+elseif (LINUX_ARM64)
     set(PLATFORM linux)
     set(ARCHIVE_FORMAT .tar.gz)
     set(ARCH arm64)

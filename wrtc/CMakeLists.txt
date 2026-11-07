@@ -18,6 +18,7 @@ setup_platform_flags(wrtc ON)
 
 target_link_libraries(wrtc PUBLIC ffmpeg::avcodec ffmpeg::avformat ffmpeg::avutil ffmpeg::swresample)
 
-if (NOT ANDROID)
+if (NOT ANDROID AND NOT IOS)
+    # iOS port: no OpenH264 on iOS (cmake/FindOpenH264.cmake).
     target_link_libraries(wrtc PRIVATE cisco::OpenH264)
 endif ()

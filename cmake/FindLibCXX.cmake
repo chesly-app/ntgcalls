@@ -1,7 +1,7 @@
 set(LIBCXX_INCLUDE ${DEPS_DIR}/libcxx)
 set(LIBCXXABI_INCLUDE ${DEPS_DIR}/libcxxabi)
 
-if((LINUX OR MACOS OR WINDOWS OR ANDROID) AND USE_LIBCXX)
+if((LINUX OR MACOS OR IOS OR WINDOWS OR ANDROID) AND USE_LIBCXX)
     GitClone(
         URL https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxx.git
         COMMIT ${LIBCXX_COMMIT}

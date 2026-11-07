@@ -1,12 +1,13 @@
 GetProperty("version.clang" CLANG_VERSION)
-if (LINUX_x86_64 OR MACOS_ARM64 OR WINDOWS_x86_64 OR ANDROID_ABI)
+if (LINUX_x86_64 OR MACOS_ARM64 OR IOS_ARM64 OR WINDOWS_x86_64 OR ANDROID_ABI)
     set(CLANG_DIR ${DEPS_DIR}/clang)
     set(CLANG_LIB_DIR ${CLANG_DIR}/lib)
     set(CLANG_BIN_DIR ${CLANG_DIR}/bin)
     set(CLANG_UPDATE ${CLANG_DIR}/update.py)
     set(CLANG_API_DIR ${CLANG_DIR}/result.xml)
 
-    if (MACOS_ARM64)
+    if (MACOS_ARM64 OR IOS_ARM64)
+        # iOS port: the iPhone is cross-compiled on an Apple silicon Mac, with the same host clang.
         set(CLANG_OS_PREFIX Mac_arm64)
     elseif (WINDOWS_x86_64)
         set(CLANG_OS_PREFIX Win)

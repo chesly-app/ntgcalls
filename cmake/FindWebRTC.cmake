@@ -27,6 +27,10 @@ if(NOT TARGET WebRTC::webrtc)
         set(PLATFORM macos)
         set(ARCHIVE_FORMAT .tar.gz)
         set(ARCH arm64)
+    elseif (IOS_ARM64)
+        # iOS port: one device-only arm64 archive, named like Android's (no arch suffix).
+        set(PLATFORM ios)
+        set(ARCHIVE_FORMAT .tar.gz)
     elseif (ANDROID)
         set(PLATFORM android)
         set(ARCHIVE_FORMAT .tar.gz)
@@ -49,7 +53,7 @@ if(NOT TARGET WebRTC::webrtc)
         message(FATAL_ERROR "${CMAKE_SYSTEM_NAME} with ${CMAKE_HOST_SYSTEM_PROCESSOR} is not supported yet")
     endif ()
     set(FILE_NAME webrtc.${PLATFORM})
-    if (NOT ANDROID)
+    if (NOT ANDROID AND NOT IOS)
         set(FILE_NAME ${FILE_NAME}_${ARCH})
     endif ()
     set(FILE_NAME ${FILE_NAME}${ARCHIVE_FORMAT})
@@ -59,6 +63,21 @@ if(NOT TARGET WebRTC::webrtc)
         DOWNLOAD_DIR ${WEBRTC_DIR}/download
         SOURCE_DIR ${WEBRTC_SRC}
     )
+
+    if (IOS AND NTG_IOS_SIMULATOR AND NOT NTG_IOS_DEPS_STAGE)
+        # iOS port: the archive has no simulator slice. The simulator links a copy whose objects
+        # say "iOS simulator" instead of "iOS"; the code is the same arm64 code. The device slice
+        # always links the downloaded archive itself.
+        set(WEBRTC_DEVICE_LIB ${WEBRTC_LIB})
+        set(WEBRTC_LIB ${WEBRTC_LIB_DIR}/simulator/${CMAKE_STATIC_LIBRARY_PREFIX}webrtc${CMAKE_STATIC_LIBRARY_SUFFIX})
+        if (NOT EXISTS ${WEBRTC_LIB} OR ${WEBRTC_DEVICE_LIB} IS_NEWER_THAN ${WEBRTC_LIB})
+            message(STATUS "Retagging libwebrtc for the iOS simulator")
+            execute_process(
+                COMMAND ${Python_EXECUTABLE} ${ROOT_DIR}/ios/scripts/retag_simulator.py ${WEBRTC_DEVICE_LIB} ${WEBRTC_LIB}
+                COMMAND_ERROR_IS_FATAL ANY
+            )
+        endif ()
+    endif ()
 
     add_library(WebRTC::webrtc STATIC IMPORTED GLOBAL)
 

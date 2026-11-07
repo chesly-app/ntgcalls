@@ -13,7 +13,16 @@ set(VA_LIB ${CMAKE_STATIC_LIBRARY_PREFIX}va${CMAKE_STATIC_LIBRARY_SUFFIX})
 set(VA_DRM_LIB ${CMAKE_STATIC_LIBRARY_PREFIX}va-drm${CMAKE_STATIC_LIBRARY_SUFFIX})
 set(VDPAU_LIB ${CMAKE_STATIC_LIBRARY_PREFIX}vdpau${CMAKE_STATIC_LIBRARY_SUFFIX})
 
-if (LINUX_ARM64)
+if (IOS)
+    # iOS port: pytgcalls/ffmpeg publishes no iOS build. FFmpeg comes per slice from the iOS deps
+    # bundle (ios/deps), configured like the macOS build minus hardware decoders and libopus.
+    if (NOT NTG_IOS_DEPS)
+        message(FATAL_ERROR "iOS needs -DNTG_IOS_DEPS=<dir> with boost/ and ffmpeg/ for this slice")
+    endif ()
+    set(FFMPEG_SRC ${NTG_IOS_DEPS}/ffmpeg)
+    set(FFMPEG_LIB_DIR ${FFMPEG_SRC}/lib)
+    message(STATUS "ffmpeg (iOS deps bundle) ${FFMPEG_SRC}")
+elseif (LINUX_ARM64)
     set(PLATFORM linux)
     set(ARCHIVE_FORMAT .tar.gz)
     set(ARCH arm64)
@@ -38,19 +47,21 @@ else ()
     return()
 endif ()
 
-GetProperty("version.ffmpeg" FFMPEG_VERSION)
-message(STATUS "ffmpeg v${FFMPEG_VERSION}")
+if (NOT IOS)
+    GetProperty("version.ffmpeg" FFMPEG_VERSION)
+    message(STATUS "ffmpeg v${FFMPEG_VERSION}")
 
-set(FILE_NAME ffmpeg.${PLATFORM})
-if (NOT ANDROID)
-    set(FILE_NAME ${FILE_NAME}-${ARCH})
+    set(FILE_NAME ffmpeg.${PLATFORM})
+    if (NOT ANDROID)
+        set(FILE_NAME ${FILE_NAME}-${ARCH})
+    endif ()
+    set(FILE_NAME ${FILE_NAME}${ARCHIVE_FORMAT})
+    DownloadProject(
+        URL ${FFMPEG_GIT}/releases/download/v${FFMPEG_VERSION}/${FILE_NAME}
+        DOWNLOAD_DIR ${FFMPEG_DIR}/download
+        SOURCE_DIR ${FFMPEG_SRC}
+    )
 endif ()
-set(FILE_NAME ${FILE_NAME}${ARCHIVE_FORMAT})
-DownloadProject(
-    URL ${FFMPEG_GIT}/releases/download/v${FFMPEG_VERSION}/${FILE_NAME}
-    DOWNLOAD_DIR ${FFMPEG_DIR}/download
-    SOURCE_DIR ${FFMPEG_SRC}
-)
 
 if (LINUX)
     if (NOT TARGET intel::va-drm)
