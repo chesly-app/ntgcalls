@@ -302,6 +302,10 @@ jobs:
   g1:
     name: Gate G1 (simulator, beside LiveKit's WebRTC)
     needs: framework
+    # A condition without a status function gets an implicit success() over every job this one
+    # depends on, directly or not, and deps-build is skipped whenever the bundle already exists.
+    # So each condition below names the results it needs.
+    if: ${{ !cancelled() && needs.framework.result == 'success' }}
     runs-on: macos-26
     timeout-minutes: 45
     steps:
@@ -340,7 +344,7 @@ jobs:
     name: Publish the framework
     needs: [ framework, g1 ]
     # Only a build that passed G0 on both slices and G1, with the real (retagged) simulator slice.
-    if: needs.framework.outputs.simulator == 'success'
+    if: ${{ !cancelled() && needs.framework.result == 'success' && needs.g1.result == 'success' && needs.framework.outputs.simulator == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
