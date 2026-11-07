@@ -33,6 +33,12 @@ its dSYM (`-debug-symbols`), an `Info.plist`, a privacy manifest and the licence
   outside the framework, so it can sit in one app beside another WebRTC build.
 - **No OpenH264.** A source-built OpenH264 is not covered by Cisco's patent licence for its own
   binaries. VP8, VP9 and AV1 from WebRTC remain.
+- **No H.264, HEVC, AAC or MP3 decoders in FFmpeg.** ntgcalls decodes with FFmpeg only for
+  group-call streams (`wrtc/src/interfaces/mtproto/*`, reached only from `GroupConnection`); a 1:1
+  call never does, since its media goes through the external source. Without these decoders the
+  binary is smaller and has less patent exposure. A group-call stream in one of these formats
+  finds no decoder, which the streaming code already handles (`avcodec_find_decoder` returns
+  null).
 - **No desktop capture, no camera module, no `Boost::process`.** iOS has no desktop capture in
   WebRTC and cannot spawn processes; camera frames arrive through the external source.
 - **Local network.** iOS asks the user before an app first sends to its local network. On iOS,
@@ -77,13 +83,17 @@ The workflow `.github/workflows/ios.yml` builds everything on a GitHub macOS run
 (Xcode 26.6) and keeps the outputs as draft release assets:
 
 1. **Deps bundle** (`ios/scripts/build_deps.sh`), once per `version.ios_deps`: FFmpeg
-   (`ios/scripts/build_ffmpeg.sh`, LGPL-2.1 configuration) and Boost.JSON (`ios/deps`), for both
-   slices. pytgcalls publishes neither for iOS. Boost.JSON is compiled with the same clang and
+   (`ios/scripts/build_ffmpeg.sh`, LGPL-2.1 configuration, fetched by the commit
+   `version.ios_ffmpeg_commit`, which its tag must still name) and Boost.JSON (`ios/deps`), for
+   both slices. pytgcalls publishes neither for iOS. Boost.JSON is compiled with the same clang and
    Chromium libc++ headers as ntgcalls (`ios/deps` declares `USE_LIBCXX` before `project()`, as
    the root `CMakeLists.txt` does), so its `std::` symbols are the WebRTC archive's
    (`std::__Cr`). The script fails if `libboost_json.a` references the SDK's `std::__1` at all,
-   or never references `std::__Cr`. Bundles before `version.ios_deps` 2 were built against the
-   SDK's headers by mistake and must not be used.
+   or never references `std::__Cr`. The bundle records the libc++, libc++abi and buildtools
+   commits it was built against (`boost/libcxx.txt`, and `BUILD.txt`), and CMake stops if they
+   differ from the WebRTC archive's: a WebRTC bump needs a `version.ios_deps` bump. Bundles
+   before `version.ios_deps` 2 were built against the SDK's headers by mistake and must not be
+   used.
 2. **Slices** (`ios/scripts/build_slice.sh`, then `ios/scripts/package_framework.sh`). If the
    retagged simulator build fails, `ios/scripts/stub_slice.sh` builds a simulator slice whose
    every function answers "not built", and the report says so.
@@ -95,7 +105,6 @@ The workflow `.github/workflows/ios.yml` builds everything on a GitHub macOS run
    without OpenH264, and no import that names the system libc++'s `std::__1`.
 4. **xcframework**: `xcodebuild -create-xcframework` with both dSYMs, zipped for SwiftPM, with
    its SHA-256.
-
 5. **Gate G1** (`ios/g1`), on the simulator: in one process, the WebRTC build LiveKit's Swift SDK
    2.19.0 pins makes an offer while two ntgcalls instances run the full key exchange and a P2P
    connection, then carry a sine wave both ways for 60 seconds. Both ends must hear audio and
@@ -103,6 +112,15 @@ The workflow `.github/workflows/ios.yml` builds everything on a GitHub macOS run
    the local network filter: with it on at one end, that end drops the local candidates it is
    offered and the call finds no path. The simulator slice is retagged, so all of this is weak
    evidence for a device.
+6. **Publish**: only a run that passed G0 on both slices and G1, with the retagged (not the
+   stub) simulator slice, replaces the draft `ios-v<version>-p<version.ios_port>`, whose target
+   is the commit it was built from. That commit is first tagged `ios-build-<first 12 hex
+   digits>`: `SOURCE.txt` in the framework names it as the corresponding source, so it must stay
+   reachable whatever happens to this branch.
+
+Only the release jobs, on Linux, hold a token that can write to the repository, and only in
+their release steps. The build and test jobs read the repository only and pass their outputs on
+as workflow artifacts. Every action is pinned by commit.
 
 To build by hand on a Mac with Xcode, CMake and Ninja:
 

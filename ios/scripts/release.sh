@@ -12,6 +12,7 @@
 #   release.sh asset-id <tag> <name>         prints the asset's id, or nothing
 #   release.sh upload <tag> <file> [name]    replaces an asset of that name
 #   release.sh download <tag> <name> <output>  fails if there is no such asset
+#   release.sh keep <commit>                 tags the commit ios-build-<first 12 hex digits>
 set -euo pipefail
 
 api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
@@ -39,7 +40,10 @@ case "$1" in
         found="$(release_json "$2")"
         if [ -n "$found" ]; then
             id="$(echo "$found" | jq -r .id)"
-            jq -n --arg tag "$2" --rawfile body "$3" '{tag_name: $tag, body: $body}' \
+            # The target moves with each build, so publishing the draft tags the commit it holds.
+            jq -n --arg tag "$2" --rawfile body "$3" --arg target "${GITHUB_SHA:-}" \
+                '{tag_name: $tag, body: $body}
+                 + (if $target == "" then {} else {target_commitish: $target} end)' \
                 | curl -fsS "${auth[@]}" -X PATCH "${api}/releases/${id}" --data @- >/dev/null
             echo "$id"
         else
@@ -75,6 +79,20 @@ case "$1" in
         asset="$("$0" asset-id "$2" "$3")"
         [ -n "$asset" ] || { echo "no asset $3 in $2" >&2; exit 1; }
         curl -fsSL "${auth[@]}" -H "Accept: application/octet-stream" -o "$4" "${api}/releases/assets/${asset}"
+        ;;
+    keep)
+        # SOURCE.txt in a published framework names its commit as the LGPL corresponding source.
+        # A tag keeps that commit reachable whatever later happens to the branch.
+        ref="tags/ios-build-${2:0:12}"
+        have="$(curl -fsS "${auth[@]}" "${api}/git/ref/${ref}" 2>/dev/null | jq -r '.object.sha // empty' || true)"
+        if [ -z "$have" ]; then
+            jq -n --arg ref "refs/${ref}" --arg sha "$2" '{ref: $ref, sha: $sha}' \
+                | curl -fsS "${auth[@]}" -X POST "${api}/git/refs" --data @- >/dev/null
+        elif [ "$have" != "$2" ]; then
+            echo "${ref} names ${have}, not $2" >&2
+            exit 1
+        fi
+        echo "kept $2 as ${ref}"
         ;;
     *)
         echo "unknown command $1" >&2
