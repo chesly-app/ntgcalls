@@ -45,7 +45,6 @@ jobs:
         id: key
         run: |
           rev="$(sed -n 's/^version.ios_deps=//p' version.properties)"
-          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
           echo "tag=ios-deps-r${rev}" >> "$GITHUB_OUTPUT"
           echo "asset=ntgcalls-ios-deps-r${rev}.tar.gz" >> "$GITHUB_OUTPUT"
 
@@ -88,7 +87,7 @@ jobs:
             echo "iOS deps bundle for the ntgcalls iOS port: FFmpeg and Boost.JSON, device and simulator, arm64."
             echo "Built by ios/scripts/build_deps.sh at ${GITHUB_SHA}."
           } > "$RUNNER_TEMP/notes.md"
-          ios/scripts/release.sh ensure '${{ steps.key.outputs.tag }}' 'ntgcalls iOS deps bundle, revision ${{ steps.key.outputs.rev }}' "$RUNNER_TEMP/notes.md"
+          ios/scripts/release.sh ensure '${{ steps.key.outputs.tag }}' "$RUNNER_TEMP/notes.md"
           ios/scripts/release.sh upload '${{ steps.key.outputs.tag }}' "$RUNNER_TEMP/${{ steps.key.outputs.asset }}"
 
   framework:
@@ -229,7 +228,7 @@ jobs:
           port="$(sed -n 's/^version.ios_port=//p' version.properties)"
           tag="ios-v${version}-p${port}"
           out="$RUNNER_TEMP/out"
-          ios/scripts/release.sh ensure "$tag" "ntgcalls ${version} for iOS, port ${port}" "$RUNNER_TEMP/ios-build-report.md"
+          ios/scripts/release.sh ensure "$tag" "$RUNNER_TEMP/ios-build-report.md"
           ios/scripts/release.sh upload "$tag" "$RUNNER_TEMP/ios-build-report.md"
           if [ -f "$out/ntgcalls.xcframework.zip" ] && [ '${{ steps.g0_sim.outcome }}' = success ]; then
             ios/scripts/release.sh upload "$tag" "$out/ntgcalls.xcframework.zip"

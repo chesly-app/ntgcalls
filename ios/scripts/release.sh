@@ -5,10 +5,13 @@
 # Drafts are visible to the repository's writers only, and GITHUB_TOKEN with contents: write can
 # read and write them. Needs GH_TOKEN and GITHUB_REPOSITORY in the environment.
 #
-#   release.sh ensure <tag> <title> <notes file>   prints the draft's id, creating it if needed
-#   release.sh asset-id <tag> <name>                prints the asset's id, or nothing
-#   release.sh upload <tag> <file> [name]           replaces an asset of that name
-#   release.sh download <tag> <name> <output>       fails if there is no such asset
+# A draft's tag_name is not stable (GitHub reports untagged-... for it), so a draft is found by
+# its title, which is always the tag it will take.
+#
+#   release.sh ensure <tag> <notes file>     prints the draft's id, creating it if needed
+#   release.sh asset-id <tag> <name>         prints the asset's id, or nothing
+#   release.sh upload <tag> <file> [name]    replaces an asset of that name
+#   release.sh download <tag> <name> <output>  fails if there is no such asset
 set -euo pipefail
 
 api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
@@ -21,7 +24,7 @@ release_json() {
         local body
         body="$(curl -fsS "${auth[@]}" "${api}/releases?per_page=100&page=${page}")"
         local found
-        found="$(echo "$body" | jq -c --arg tag "$1" '[.[] | select(.tag_name == $tag)][0] // empty')"
+        found="$(echo "$body" | jq -c --arg tag "$1" '[.[] | select(.name == $tag)][0] // empty')"
         if [ -n "$found" ]; then
             echo "$found"
             return
@@ -36,12 +39,12 @@ case "$1" in
         found="$(release_json "$2")"
         if [ -n "$found" ]; then
             id="$(echo "$found" | jq -r .id)"
-            jq -n --arg name "$3" --rawfile body "$4" '{name: $name, body: $body}' \
+            jq -n --arg tag "$2" --rawfile body "$3" '{tag_name: $tag, body: $body}' \
                 | curl -fsS "${auth[@]}" -X PATCH "${api}/releases/${id}" --data @- >/dev/null
             echo "$id"
         else
-            jq -n --arg tag "$2" --arg name "$3" --rawfile body "$4" --arg target "${GITHUB_SHA:-}" \
-                '{tag_name: $tag, name: $name, body: $body, draft: true, prerelease: true}
+            jq -n --arg tag "$2" --rawfile body "$3" --arg target "${GITHUB_SHA:-}" \
+                '{tag_name: $tag, name: $tag, body: $body, draft: true, prerelease: true}
                  + (if $target == "" then {} else {target_commitish: $target} end)' \
                 | curl -fsS "${auth[@]}" -X POST "${api}/releases" --data @- | jq -r .id
         fi
