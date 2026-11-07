@@ -103,6 +103,9 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v7
+        with:
+          # ThirdPartyNotices.cmake reads the licences of the submodules.
+          submodules: recursive
 
       - name: Select Xcode
         run: |
