@@ -15,8 +15,10 @@ endif ()
 
 if (IOS)
     # iOS port: pytgcalls/boost publishes no iOS build. Boost.JSON, the only compiled part used
-    # here, comes per slice from the iOS deps bundle (ios/deps), built against the same libc++
-    # headers as this library. Boost::process stays off, as on Android: iOS cannot spawn.
+    # here, comes per slice from the iOS deps bundle (ios/deps), built against the same Chromium
+    # libc++ headers as this library (std::__Cr); ios/scripts/build_deps.sh fails a bundle that
+    # references the SDK's std::__1, and G0 check 14 fails a framework that imports it.
+    # Boost::process stays off, as on Android: iOS cannot spawn.
     if (NOT NTG_IOS_DEPS)
         message(FATAL_ERROR "iOS needs -DNTG_IOS_DEPS=<dir> with boost/ and ffmpeg/ for this slice")
     endif ()

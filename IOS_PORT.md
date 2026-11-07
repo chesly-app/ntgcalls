@@ -77,7 +77,11 @@ The workflow `.github/workflows/ios.yml` builds everything on a GitHub macOS run
 1. **Deps bundle** (`ios/scripts/build_deps.sh`), once per `version.ios_deps`: FFmpeg
    (`ios/scripts/build_ffmpeg.sh`, LGPL-2.1 configuration) and Boost.JSON (`ios/deps`), for both
    slices. pytgcalls publishes neither for iOS. Boost.JSON is compiled with the same clang and
-   libc++ headers as ntgcalls, so its `std::` symbols match the WebRTC archive's (`std::__Cr`).
+   Chromium libc++ headers as ntgcalls (`ios/deps` declares `USE_LIBCXX` before `project()`, as
+   the root `CMakeLists.txt` does), so its `std::` symbols are the WebRTC archive's
+   (`std::__Cr`). The script fails if `libboost_json.a` references the SDK's `std::__1` at all,
+   or never references `std::__Cr`. Bundles before `version.ios_deps` 2 were built against the
+   SDK's headers by mistake and must not be used.
 2. **Slices** (`ios/scripts/build_slice.sh`, then `ios/scripts/package_framework.sh`). If the
    retagged simulator build fails, `ios/scripts/stub_slice.sh` builds a simulator slice whose
    every function answers "not built", and the report says so.
@@ -85,8 +89,8 @@ The workflow `.github/workflows/ios.yml` builds everything on a GitHub macOS run
    iOS, install name, system libraries only, only `_ntg_*` exported, no defined weak external,
    no ObjC class or category, no `AVAudioSession` or AVFoundation import, dSYM with matching
    UUID, no debug map in the shipped binary, the header identical to the release header, the
-   version string, `Info.plist`, the privacy manifest, and the software video factories linked
-   without OpenH264.
+   version string, `Info.plist`, the privacy manifest, the software video factories linked
+   without OpenH264, and no import that names the system libc++'s `std::__1`.
 4. **xcframework**: `xcodebuild -create-xcframework` with both dSYMs, zipped for SwiftPM, with
    its SHA-256.
 

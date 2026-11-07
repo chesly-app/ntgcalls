@@ -11,6 +11,7 @@
 #  5 only _ntg_* exported           11 header identical to the release header
 #  6 no defined weak external       12 version string, Info.plist, privacy manifest
 #                                   13 software video factories linked, OpenH264 not
+#                                   14 no import of the system libc++'s std::__1
 #
 # Usage: check_slice.sh <iphoneos|iphonesimulator> <slice dir>
 set -uo pipefail
@@ -109,6 +110,14 @@ if [[ "$version" != *.stub ]]; then
     h264="$(echo "$symbols" | grep -c -E 'WelsCreate|openh264' || true)"
     check "video factories" "$([ -z "$missing" ] && [ "$h264" -eq 0 ] && echo ok)" "missing:${missing:- none}; OpenH264 symbols: $h264"
 fi
+
+# 14: all C++ inside the framework uses the archive's libc++ (std::__Cr). An import naming
+# std::__1 means something was compiled against the SDK's headers and exchanges std:: objects
+# with the archive's code across two libc++ builds. Matched anywhere in a name: the namespace can
+# sit in the middle of one (std::runtime_error(std::__1::string const&)). libc++.1.dylib may still
+# be linked for the C++ runtime (operator new, __cxa_*), which names no std::__1 type.
+sdk_libcxx="$(nm -u -j "$bin" | grep 'St3__1' || true)"
+check "libc++ namespace" "$([ -z "$sdk_libcxx" ] && echo ok)" "$(echo "$sdk_libcxx" | grep -c . || true) std::__1 imports${sdk_libcxx:+: $(echo "$sdk_libcxx" | head -10 | paste -sd ' ' -)}"
 
 size="$(stat -f %z "$bin")"
 echo "INFO size: $size bytes ($((size / 1048576)) MiB) stripped binary"

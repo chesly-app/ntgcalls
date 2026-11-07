@@ -41,6 +41,7 @@ for sdk in iphoneos iphonesimulator; do
         -DCMAKE_OSX_ARCHITECTURES=arm64 \
         -DNTG_IOS_SIMULATOR="$simulator" \
         -DNTG_IOS_DEPS_STAGE=ON \
+        -DUSE_LIBCXX=ON \
         -DPython_EXECUTABLE="$(command -v python3)"
     cmake --build "$build"
     cmake --install "$build" --prefix "$stage/$sdk"
@@ -53,6 +54,20 @@ for sdk in iphoneos iphonesimulator; do
         echo "$sdk/$lib: $platforms"
         [ "$platforms" = "$sdk" ] || { echo "$sdk/$lib holds objects for: $platforms" >&2; exit 1; }
     done
+
+    # Boost.JSON must use the archive's libc++ (std::__Cr), never the SDK's (std::__1): both
+    # link, and the two only agree on std::string's layout by chance. Matched anywhere in a name,
+    # since std::__1 can sit in the middle of one (std::runtime_error(std::__1::string const&)).
+    json="$stage/$sdk/boost/lib/libboost_json.a"
+    json_symbols="$(nm -j "$json")"
+    sdk_libcxx="$(grep -c 'St3__1' <<< "$json_symbols" || true)"
+    archive_libcxx="$(grep -c 'St4__Cr' <<< "$json_symbols" || true)"
+    echo "$sdk/boost/lib/libboost_json.a: $archive_libcxx std::__Cr references, $sdk_libcxx std::__1"
+    if [ "$sdk_libcxx" -ne 0 ] || [ "$archive_libcxx" -eq 0 ]; then
+        echo "$sdk/boost/lib/libboost_json.a is not built against the archive's libc++:" >&2
+        grep 'St3__1' <<< "$json_symbols" | sort -u | head -20 >&2 || true
+        exit 1
+    fi
 done
 
 for name in webrtc.ios.tar.gz boost.macos-arm64.tar.gz; do
@@ -67,7 +82,7 @@ done
     echo "ntgcalls iOS deps bundle, revision $(prop version.ios_deps)"
     echo "source: $(git -C "$root" rev-parse HEAD)"
     echo "ffmpeg: n${ffmpeg_version} (github.com/FFmpeg/FFmpeg), ios/scripts/build_ffmpeg.sh"
-    echo "boost: ${boost_version}, headers from pytgcalls/boost boost.macos-arm64.tar.gz, Boost.JSON built by ios/deps"
+    echo "boost: ${boost_version}, headers from pytgcalls/boost boost.macos-arm64.tar.gz, Boost.JSON built by ios/deps against the archive's libc++ (std::__Cr)"
     echo "minimum iOS: ${min_ios}"
     echo "xcode: $(xcodebuild -version | tr '\n' ' ')"
 } > "$stage/BUILD.txt"
