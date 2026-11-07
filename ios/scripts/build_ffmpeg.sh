@@ -2,8 +2,11 @@
 # iOS port (Chesly fork, 2026-11).
 #
 # Builds FFmpeg's static libraries for one iOS slice: iphoneos or iphonesimulator, arm64.
-# The configuration follows pytgcalls/ffmpeg's macOS build (same decoders, demuxers and parsers)
-# with three changes for the iPhone:
+# The configuration follows pytgcalls/ffmpeg's macOS build with four changes for the iPhone:
+# - no H.264, HEVC, AAC or MP3 decoders, and none of their parsers or raw demuxers: ntgcalls
+#   decodes with FFmpeg only for group-call streams (wrtc/src/interfaces/mtproto/*, reached only
+#   from GroupConnection), never in a 1:1 call, whose media goes through the external source.
+#   fewer decoders make a smaller binary with less patent exposure;
 # - no hardware decoders and no autodetected system libraries (VideoToolbox, AudioToolbox,
 #   AVFoundation, Security): this library never decodes a group-call stream through them, and
 #   each one would add a framework the iPhone build must not import;
@@ -11,13 +14,17 @@
 # - zlib from the SDK is the only external library.
 # FFmpeg is LGPL-2.1 here: neither --enable-gpl nor --enable-nonfree is used.
 #
-# Usage: build_ffmpeg.sh <iphoneos|iphonesimulator> <prefix> <ffmpeg version> <minimum iOS>
+# FFmpeg is fetched by commit, not by its tag, and the tag must still name that commit.
+#
+# Usage: build_ffmpeg.sh <iphoneos|iphonesimulator> <prefix> <ffmpeg version> <commit> <minimum iOS>
 set -euo pipefail
 
 sdk="$1"
 prefix="$2"
 version="$3"
-min_ios="$4"
+commit="$4"
+min_ios="$5"
+ffmpeg_git=https://github.com/FFmpeg/FFmpeg.git
 
 case "$sdk" in
     iphoneos) triple="arm64-apple-ios${min_ios}" ;;
@@ -30,11 +37,16 @@ cc="$(xcrun --sdk "$sdk" -f clang)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-git clone --quiet --depth 1 --branch "n${version}" https://github.com/FFmpeg/FFmpeg.git "$work/src"
+tagged="$(git ls-remote "$ffmpeg_git" "refs/tags/n${version}^{}" | awk '{print $1}')"
+[ "$tagged" = "$commit" ] || { echo "FFmpeg n${version} is ${tagged:-missing}, pinned ${commit}" >&2; exit 1; }
+git init --quiet "$work/src"
+git -C "$work/src" fetch --quiet --depth 1 "$ffmpeg_git" "$commit"
+git -C "$work/src" checkout --quiet FETCH_HEAD
+[ "$(git -C "$work/src" rev-parse HEAD)" = "$commit" ]
 
 decoders=(
-    h264 hevc mpeg4 msmpeg4v2 msmpeg4v3 opus aac aac_fixed aac_latm
-    mp1 mp1float mp2 mp2float mp3 mp3adu mp3adufloat mp3float mp3on4 mp3on4float
+    mpeg4 msmpeg4v2 msmpeg4v3 opus
+    mp1 mp1float mp2 mp2float
     wavpack wmalossless wmapro wmav1 wmav2 wmavoice
     pcm_alaw pcm_f32be pcm_f32le pcm_f64be pcm_f64le pcm_lxf pcm_mulaw
     pcm_s16be pcm_s16be_planar pcm_s16le pcm_s16le_planar
@@ -42,8 +54,8 @@ decoders=(
     pcm_s32be pcm_s32le pcm_s32le_planar pcm_s64be pcm_s64le pcm_s8 pcm_s8_planar
     pcm_u16be pcm_u16le pcm_u24be pcm_u24le pcm_u32be pcm_u32le pcm_u8
 )
-demuxers=(h264 hevc matroska m4v mov mp3 ogg wav aac)
-parsers=(h264 hevc mpegaudio mpeg4video opus aac aac_latm)
+demuxers=(matroska m4v mov mp3 ogg wav)
+parsers=(mpegaudio mpeg4video opus)
 muxers=(ogg opus mp4)
 
 flags=()
@@ -78,4 +90,13 @@ make install
 
 for lib in avcodec avformat avutil swresample; do
     test -f "$prefix/lib/lib${lib}.a"
+done
+# None of the dropped decoders may come back through another option's dependencies. The names
+# are read first: grep -q in a pipe would end nm early, and pipefail would read that as no match.
+codec_symbols="$(nm -j -U "$prefix/lib/libavcodec.a" 2>/dev/null)"
+for codec in h264 hevc aac aac_fixed aac_latm mp3 mp3float mp3adu mp3adufloat mp3on4 mp3on4float; do
+    if grep -qx "_ff_${codec}_decoder" <<< "$codec_symbols"; then
+        echo "libavcodec.a still has the ${codec} decoder" >&2
+        exit 1
+    fi
 done

@@ -48,3 +48,10 @@ setup_platform_flags(boost_json OFF)
 
 install(TARGETS boost_json ARCHIVE DESTINATION boost/lib)
 install(DIRECTORY ${BOOST_DIR}/src/include/ DESTINATION boost/include)
+
+# The libc++ this Boost.JSON is built against. FindBoost's iOS branch refuses a bundle whose
+# commits differ from the WebRTC archive's: a bundle built against another libc++ still links,
+# and nothing else would notice.
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/libcxx.txt
+    "LIBCXX_COMMIT=${LIBCXX_COMMIT}\nLIBCXX_ABI_COMMIT=${LIBCXX_ABI_COMMIT}\nBUILDTOOLS_COMMIT=${BUILDTOOLS_COMMIT}\n")
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libcxx.txt DESTINATION boost)

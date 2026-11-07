@@ -18,6 +18,7 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 prop() { sed -n "s/^$1=//p" "$root/version.properties"; }
 
 ffmpeg_version="$(prop version.ffmpeg)"
+ffmpeg_commit="$(prop version.ios_ffmpeg_commit)"
 boost_version="$(prop version.boost)"
 min_ios="$(prop version.ios_min)"
 stage="$(mktemp -d)"
@@ -28,7 +29,7 @@ for sdk in iphoneos iphonesimulator; do
     [ "$sdk" = iphonesimulator ] && simulator=ON
 
     echo "::group::FFmpeg ${ffmpeg_version} for ${sdk}"
-    "$root/ios/scripts/build_ffmpeg.sh" "$sdk" "$stage/$sdk/ffmpeg" "$ffmpeg_version" "$min_ios"
+    "$root/ios/scripts/build_ffmpeg.sh" "$sdk" "$stage/$sdk/ffmpeg" "$ffmpeg_version" "$ffmpeg_commit" "$min_ios"
     echo "::endgroup::"
 
     echo "::group::Boost.JSON ${boost_version} for ${sdk}"
@@ -45,6 +46,7 @@ for sdk in iphoneos iphonesimulator; do
         -DPython_EXECUTABLE="$(command -v python3)"
     cmake --build "$build"
     cmake --install "$build" --prefix "$stage/$sdk"
+    test -s "$stage/$sdk/boost/libcxx.txt"
     echo "::endgroup::"
 
     # Every object in a slice's libraries must carry that slice's platform.
@@ -81,8 +83,10 @@ done
 {
     echo "ntgcalls iOS deps bundle, revision $(prop version.ios_deps)"
     echo "source: $(git -C "$root" rev-parse HEAD)"
-    echo "ffmpeg: n${ffmpeg_version} (github.com/FFmpeg/FFmpeg), ios/scripts/build_ffmpeg.sh"
+    echo "ffmpeg: n${ffmpeg_version} at ${ffmpeg_commit} (github.com/FFmpeg/FFmpeg), ios/scripts/build_ffmpeg.sh"
     echo "boost: ${boost_version}, headers from pytgcalls/boost boost.macos-arm64.tar.gz, Boost.JSON built by ios/deps against the archive's libc++ (std::__Cr)"
+    echo "boost built against:"
+    sed 's/^/  /' "$stage/iphoneos/boost/libcxx.txt"
     echo "minimum iOS: ${min_ios}"
     echo "xcode: $(xcodebuild -version | tr '\n' ' ')"
 } > "$stage/BUILD.txt"
