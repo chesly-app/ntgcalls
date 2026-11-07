@@ -3,7 +3,6 @@
 //
 
 #ifdef IS_IOS
-#include <absl/strings/match.h>
 #include <wrtc/utils/local_network.hpp>
 
 namespace wrtc::utils {
@@ -29,7 +28,10 @@ namespace wrtc::utils {
     bool is_local_remote_candidate(const webrtc::Candidate& candidate, const webrtc::NetworkManager* network_manager) {
         const webrtc::SocketAddress& address = candidate.address();
         if (address.IsUnresolvedIP()) {
-            return absl::EndsWith(address.hostname(), ".local");
+            // libwebrtc would resolve the name and send to whatever it answers, a LAN address
+            // included, and an mDNS (.local) lookup is itself local-network traffic. Reflector
+            // names are resolved to the server's address before this point.
+            return true;
         }
         return is_local_only(address.ipaddr()) || in_local_subnet(address.ipaddr(), network_manager);
     }

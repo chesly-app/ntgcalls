@@ -28,7 +28,8 @@ namespace wrtc::utils {
     bool in_local_subnet(const webrtc::IPAddress& ip, const webrtc::NetworkManager* network_manager);
 
     // A remote candidate this device should never send to: a local address, an address on one
-    // of its own subnets, or an mDNS name, whose lookup is itself local-network traffic.
+    // of its own subnets, or any name still unresolved here (an mDNS name's lookup is itself
+    // local-network traffic, and any other name may resolve to a LAN address).
     bool is_local_remote_candidate(const webrtc::Candidate& candidate, const webrtc::NetworkManager* network_manager);
 
     // A gathered host candidate that only this network can reach. Signalling it would invite a

@@ -38,12 +38,14 @@ its dSYM (`-debug-symbols`), an `Info.plist`, a privacy manifest and the licence
 - **Local network.** iOS asks the user before an app first sends to its local network. On iOS,
   ntgcalls does not offer LAN-only host candidates (RFC 1918, link-local, RFC 6598, unique-local
   IPv6) and does not try remote candidates on local addresses, on its own subnets, or named by
-  mDNS (`wrtc/include/wrtc/utils/local_network.hpp`). Calls between two devices on the same
-  network then go through a public address or Telegram's reflectors. One case remains that only
+  any hostname it would have to resolve, mDNS included
+  (`wrtc/include/wrtc/utils/local_network.hpp`). Calls between two devices on the same network
+  then go through a public address or Telegram's reflectors. One case remains that only
   a libwebrtc change could close: a peer on the same IPv6 /64 that sends a check to this
   device's global IPv6 address gets an answer, so an app still needs
   `NSLocalNetworkUsageDescription`. The custom parameter `"network_allow_local_addresses": true`
-  turns the filter off for one call, which the same-machine test uses.
+  turns the filter off for one call, which the same-machine test uses. It is read once, when the
+  connection is created.
 - **The key fingerprint is not logged** on iOS (`ntgcalls/src/instances/p2p_call.cpp`).
 - **Version.** `ntg_get_version()` returns `3.0.6+ios.<version.ios_port>.<commit>`; the framework's
   `CFBundleShortVersionString` is `3.0.6`, its `CFBundleVersion` the port revision, and
