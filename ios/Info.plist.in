@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- iOS port (Chesly fork, 2026-11): Info.plist of ntgcalls.framework, filled by build_slice.sh. -->
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>ntgcalls</string>
+    <key>CFBundleIdentifier</key>
+    <string>app.chesly.ntgcalls</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>ntgcalls</string>
+    <key>CFBundlePackageType</key>
+    <string>FMWK</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@SHORT_VERSION@</string>
+    <key>CFBundleVersion</key>
+    <string>@BUNDLE_VERSION@</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array>
+        <string>@PLATFORM@</string>
+    </array>
+    <key>MinimumOSVersion</key>
+    <string>@MIN_IOS@</string>
+    <key>NTGCallsVersion</key>
+    <string>@FULL_VERSION@</string>
+</dict>
+</plist>

@@ -1,0 +1,237 @@
+# iOS port (Chesly fork, 2026-11).
+#
+# Builds ntgcalls.xcframework for iOS (device and simulator, arm64) from this branch and keeps
+# the outputs as draft release assets:
+#   ios-deps-r<version.ios_deps>    FFmpeg and Boost.JSON for both slices, built once per revision
+#   ios-v<version>-p<version.ios_port>  ntgcalls.xcframework.zip, its SHA-256 and the build report
+# Gate G0 (ios/scripts/check_slice.sh) runs on each slice; the framework is published only when
+# the device slice passes every check.
+name: iOS
+permissions:
+  contents: write
+on:
+  push:
+    branches: [ ios-port ]
+    paths:
+      - '.github/workflows/ios.yml'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - 'ios/**'
+      - 'ntgcalls/**'
+      - 'targets/c/**'
+      - 'version.properties'
+      - 'wrtc/**'
+  workflow_dispatch:
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  GH_TOKEN: ${{ github.token }}
+  XCODE_APP: /Applications/Xcode_26.6.app
+
+jobs:
+  deps:
+    name: Deps bundle
+    runs-on: macos-26
+    timeout-minutes: 120
+    outputs:
+      tag: ${{ steps.key.outputs.tag }}
+      asset: ${{ steps.key.outputs.asset }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Name the bundle
+        id: key
+        run: |
+          rev="$(sed -n 's/^version.ios_deps=//p' version.properties)"
+          echo "rev=${rev}" >> "$GITHUB_OUTPUT"
+          echo "tag=ios-deps-r${rev}" >> "$GITHUB_OUTPUT"
+          echo "asset=ntgcalls-ios-deps-r${rev}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Look for the bundle
+        id: have
+        run: |
+          id="$(ios/scripts/release.sh asset-id '${{ steps.key.outputs.tag }}' '${{ steps.key.outputs.asset }}')"
+          echo "found=$([ -n "$id" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "asset id: ${id:-none}"
+
+      - name: Select Xcode
+        if: steps.have.outputs.found != 'true'
+        run: |
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+
+      - name: Restore clang
+        id: clang
+        if: steps.have.outputs.found != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: deps/clang
+          key: chromium-clang-mac-arm64-${{ hashFiles('cmake/FindClang.cmake') }}-23
+
+      - name: Build the bundle
+        if: steps.have.outputs.found != 'true'
+        run: ios/scripts/build_deps.sh "$RUNNER_TEMP/${{ steps.key.outputs.asset }}"
+
+      - name: Save clang
+        if: always() && steps.have.outputs.found != 'true' && steps.clang.outputs.cache-hit != 'true' && hashFiles('deps/clang/bin/clang') != ''
+        uses: actions/cache/save@v6
+        with:
+          path: deps/clang
+          key: chromium-clang-mac-arm64-${{ hashFiles('cmake/FindClang.cmake') }}-23
+
+      - name: Publish the bundle
+        if: steps.have.outputs.found != 'true'
+        run: |
+          {
+            echo "iOS deps bundle for the ntgcalls iOS port: FFmpeg and Boost.JSON, device and simulator, arm64."
+            echo "Built by ios/scripts/build_deps.sh at ${GITHUB_SHA}."
+          } > "$RUNNER_TEMP/notes.md"
+          ios/scripts/release.sh ensure '${{ steps.key.outputs.tag }}' 'ntgcalls iOS deps bundle, revision ${{ steps.key.outputs.rev }}' "$RUNNER_TEMP/notes.md"
+          ios/scripts/release.sh upload '${{ steps.key.outputs.tag }}' "$RUNNER_TEMP/${{ steps.key.outputs.asset }}"
+
+  framework:
+    name: Framework
+    needs: deps
+    runs-on: macos-26
+    timeout-minutes: 300
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/../ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+      CCACHE_MAXSIZE: 6G
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Install ccache
+        run: brew install ccache
+
+      - name: Restore clang
+        id: clang
+        uses: actions/cache/restore@v6
+        with:
+          path: deps/clang
+          key: chromium-clang-mac-arm64-${{ hashFiles('cmake/FindClang.cmake') }}-23
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ github.workspace }}/../ccache
+          key: ccache-ios-${{ github.sha }}-${{ github.run_attempt }}
+          restore-keys: ccache-ios-
+
+      - name: Fetch the deps bundle
+        run: |
+          mkdir -p "$RUNNER_TEMP/deps"
+          ios/scripts/release.sh download '${{ needs.deps.outputs.tag }}' '${{ needs.deps.outputs.asset }}' "$RUNNER_TEMP/deps.tar.gz"
+          tar -xzf "$RUNNER_TEMP/deps.tar.gz" -C "$RUNNER_TEMP/deps"
+          cat "$RUNNER_TEMP/deps/BUILD.txt"
+
+      - name: Build the device slice
+        run: ios/scripts/build_slice.sh iphoneos "$RUNNER_TEMP/deps" "$RUNNER_TEMP/out"
+
+      - name: Check webrtc.ios.tar.gz against its pin
+        run: |
+          expected="$(awk '$2 == "webrtc.ios.tar.gz" {print $1}' ios/pins.sha256)"
+          actual="$(shasum -a 256 deps/libwebrtc/download/webrtc.ios.tar.gz | awk '{print $1}')"
+          echo "webrtc.ios.tar.gz $actual"
+          [ "$expected" = "$actual" ]
+
+      - name: Gate G0, device
+        id: g0_device
+        run: |
+          set -o pipefail
+          ios/scripts/check_slice.sh iphoneos "$RUNNER_TEMP/out/iphoneos" | tee "$RUNNER_TEMP/g0-iphoneos.txt"
+
+      - name: Build the simulator slice (retagged WebRTC)
+        id: sim
+        continue-on-error: true
+        run: ios/scripts/build_slice.sh iphonesimulator "$RUNNER_TEMP/deps" "$RUNNER_TEMP/out"
+
+      - name: Save clang
+        if: always() && steps.clang.outputs.cache-hit != 'true' && hashFiles('deps/clang/bin/clang') != ''
+        uses: actions/cache/save@v6
+        with:
+          path: deps/clang
+          key: chromium-clang-mac-arm64-${{ hashFiles('cmake/FindClang.cmake') }}-23
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ github.workspace }}/../ccache
+          key: ccache-ios-${{ github.sha }}-${{ github.run_attempt }}
+
+      - name: Stub the simulator slice
+        if: steps.sim.outcome == 'failure'
+        run: |
+          echo "The retagged simulator build failed; the simulator slice is a stub that answers 'not built'."
+          ios/scripts/stub_slice.sh iphonesimulator "$RUNNER_TEMP/out/iphoneos/ntgcalls.framework/Headers/ntgcalls.h" "$RUNNER_TEMP/out"
+
+      - name: Gate G0, simulator
+        id: g0_sim
+        run: |
+          set -o pipefail
+          ios/scripts/check_slice.sh iphonesimulator "$RUNNER_TEMP/out/iphonesimulator" | tee "$RUNNER_TEMP/g0-iphonesimulator.txt"
+
+      - name: Assemble the xcframework
+        run: |
+          out="$RUNNER_TEMP/out"
+          xcodebuild -create-xcframework \
+            -framework "$out/iphoneos/ntgcalls.framework" -debug-symbols "$out/iphoneos/ntgcalls.framework.dSYM" \
+            -framework "$out/iphonesimulator/ntgcalls.framework" -debug-symbols "$out/iphonesimulator/ntgcalls.framework.dSYM" \
+            -output "$out/ntgcalls.xcframework"
+          cp LICENSE THIRD_PARTY_NOTICES.md "$out/ntgcalls.xcframework/"
+          (cd "$out" && ditto -c -k --sequesterRsrc --keepParent ntgcalls.xcframework ntgcalls.xcframework.zip)
+          (cd "$out" && shasum -a 256 ntgcalls.xcframework.zip | tee ntgcalls.xcframework.zip.sha256)
+          ls -l "$out"
+
+      - name: Write the report
+        if: always()
+        run: |
+          out="$RUNNER_TEMP/out"
+          report="$RUNNER_TEMP/ios-build-report.md"
+          {
+            echo "# ntgcalls iOS build"
+            echo
+            echo "- commit: ${GITHUB_SHA}"
+            echo "- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "- version: $(cat "$out/iphoneos/VERSION" 2>/dev/null || echo none)"
+            echo "- xcode: $(xcodebuild -version | head -1), iOS SDK $(xcrun --sdk iphoneos --show-sdk-version)"
+            echo "- deps: ${{ needs.deps.outputs.tag }}"
+            echo "- simulator slice: $([ '${{ steps.sim.outcome }}' = success ] && echo 'built (retagged WebRTC)' || echo 'stub (not built)')"
+            echo "- xcframework.zip sha256: $(awk '{print $1}' "$out/ntgcalls.xcframework.zip.sha256" 2>/dev/null || echo none)"
+            echo "- xcframework.zip size: $(stat -f %z "$out/ntgcalls.xcframework.zip" 2>/dev/null || echo none) bytes"
+            for sdk in iphoneos iphonesimulator; do
+              echo
+              echo "## G0, $sdk"
+              echo
+              echo '```'
+              cat "$RUNNER_TEMP/g0-$sdk.txt" 2>/dev/null || echo "not run"
+              echo '```'
+            done
+          } > "$report"
+          cat "$report"
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish
+        if: always() && steps.g0_device.outcome == 'success'
+        run: |
+          version="$(sed -n 's/.*project(ntgcalls VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          port="$(sed -n 's/^version.ios_port=//p' version.properties)"
+          tag="ios-v${version}-p${port}"
+          out="$RUNNER_TEMP/out"
+          ios/scripts/release.sh ensure "$tag" "ntgcalls ${version} for iOS, port ${port}" "$RUNNER_TEMP/ios-build-report.md"
+          ios/scripts/release.sh upload "$tag" "$RUNNER_TEMP/ios-build-report.md"
+          if [ -f "$out/ntgcalls.xcframework.zip" ] && [ '${{ steps.g0_sim.outcome }}' = success ]; then
+            ios/scripts/release.sh upload "$tag" "$out/ntgcalls.xcframework.zip"
+            ios/scripts/release.sh upload "$tag" "$out/ntgcalls.xcframework.zip.sha256"
+          fi
