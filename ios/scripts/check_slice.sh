@@ -92,7 +92,8 @@ fi
 
 # 12
 version="$(cat "$slice/VERSION")"
-check "version string" "$(strings -a "$bin" | grep -Fxq "$version" && echo ok)" "$version"
+# No -q: grep leaving early would kill strings, and pipefail would read that as no match.
+check "version string" "$(strings -a "$bin" | grep -Fx "$version" >/dev/null && echo ok)" "$version"
 check "Info.plist" "$(plutil -lint -s "$fw/Info.plist" >/dev/null && echo ok)" "$(plutil -extract CFBundleShortVersionString raw "$fw/Info.plist" 2>/dev/null) ($(plutil -extract CFBundleVersion raw "$fw/Info.plist" 2>/dev/null)), $(plutil -extract NTGCallsVersion raw "$fw/Info.plist" 2>/dev/null)"
 reasons="$(plutil -convert json -o - "$fw/PrivacyInfo.xcprivacy" 2>/dev/null | python3 -I -c 'import json,sys; d=json.load(sys.stdin); print(" ".join(t["NSPrivacyAccessedAPIType"].replace("NSPrivacyAccessedAPICategory","")+"="+",".join(t["NSPrivacyAccessedAPITypeReasons"]) for t in d["NSPrivacyAccessedAPITypes"]) or "none")' 2>/dev/null)"
 check "privacy manifest" "$([ -n "$reasons" ] && echo ok)" "${reasons:-unreadable}"
