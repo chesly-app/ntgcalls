@@ -207,7 +207,7 @@ jobs:
             echo "- commit: ${GITHUB_SHA}"
             echo "- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo "- version: $(cat "$out/iphoneos/VERSION" 2>/dev/null || echo none)"
-            echo "- xcode: $(xcodebuild -version | head -1), iOS SDK $(xcrun --sdk iphoneos --show-sdk-version)"
+            echo "- xcode: $(xcodebuild -version | sed -n 1p), iOS SDK $(xcrun --sdk iphoneos --show-sdk-version)"
             echo "- deps: ${{ needs.deps.outputs.tag }}"
             echo "- simulator slice: $([ '${{ steps.sim.outcome }}' = success ] && echo 'built (retagged WebRTC)' || echo 'stub (not built)')"
             echo "- xcframework.zip sha256: $(awk '{print $1}' "$out/ntgcalls.xcframework.zip.sha256" 2>/dev/null || echo none)"
@@ -266,7 +266,7 @@ jobs:
           udid="$(xcrun simctl list devices available -j | jq -r '[.devices | to_entries[] | select(.key | test("iOS")) | .value[] | select(.name | test("iPhone"))][0].udid')"
           echo "simulator $udid"
           xcodebuild -list -json | tee "$RUNNER_TEMP/list.json"
-          scheme="$(jq -r '[.workspace.schemes[] | select(endswith("-Package"))][0] // "G1Support"' "$RUNNER_TEMP/list.json")"
+          scheme="$(jq -r '.workspace.schemes[0]' "$RUNNER_TEMP/list.json")"
           echo "scheme $scheme"
           xcodebuild test -scheme "$scheme" -destination "platform=iOS Simulator,id=${udid}" \
             | tee "$RUNNER_TEMP/g1.log" | grep -E --line-buffered 'Test Case|Test Suite|error:|ntgcalls |emojis |connected|heard|log lines|\*\* TEST'
