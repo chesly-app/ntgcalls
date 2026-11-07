@@ -1,0 +1,339 @@
+# iOS port.
+#
+# Builds ntgcalls.xcframework for iOS (device and simulator, arm64) from this branch and keeps
+# the outputs as draft release assets:
+#   ios-deps-r<version.ios_deps>    FFmpeg and Boost.JSON for both slices, built once per revision
+#   ios-v<version>-p<version.ios_port>  ntgcalls.xcframework.zip, its SHA-256 and the build report
+# Gate G0 (ios/scripts/check_slice.sh) runs on each slice.
+# The framework draft is replaced only by a run that passed it, with a built simulator slice,
+# and the commit it was built from is then tagged ios-build-<commit>, so the source SOURCE.txt
+# names stays reachable.
+#
+# Tokens: every job reads the repository only. The three jobs that touch the drafts, on Linux,
+# are the only ones with contents: write (drafts are visible to writers only), and only their
+# release steps see GH_TOKEN. Nothing that compiles or runs third-party code has a write token;
+# builds hand their outputs on as workflow artifacts. Actions are pinned by commit.
+name: iOS
+permissions:
+  contents: read
+on:
+  push:
+    branches: [ master, dev ]
+    paths:
+      - '.github/workflows/ios.yml'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - 'ios/**'
+      - 'ntgcalls/**'
+      - 'targets/c/**'
+      - 'version.properties'
+      - 'wrtc/**'
+  workflow_dispatch:
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  XCODE_APP: /Applications/Xcode_26.6.app
+
+jobs:
+  deps-lookup:
+    name: Find the deps bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.key.outputs.tag }}
+      asset: ${{ steps.key.outputs.asset }}
+      found: ${{ steps.have.outputs.found }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Name the bundle
+        id: key
+        run: |
+          rev="$(sed -n 's/^version.ios_deps=//p' version.properties)"
+          echo "tag=ios-deps-r${rev}" >> "$GITHUB_OUTPUT"
+          echo "asset=ntgcalls-ios-deps-r${rev}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Look for the bundle
+        id: have
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id="$(ios/scripts/release.sh asset-id '${{ steps.key.outputs.tag }}' '${{ steps.key.outputs.asset }}')"
+          echo "found=$([ -n "$id" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "asset id: ${id:-none}"
+
+      - name: Fetch the bundle
+        if: steps.have.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ios/scripts/release.sh download '${{ steps.key.outputs.tag }}' '${{ steps.key.outputs.asset }}' "$RUNNER_TEMP/deps.tar.gz"
+
+      - name: Hand the bundle on
+        if: steps.have.outputs.found == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-deps
+          path: ${{ runner.temp }}/deps.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
+  deps-build:
+    name: Deps bundle
+    needs: deps-lookup
+    if: needs.deps-lookup.outputs.found != 'true'
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+
+      - name: Restore clang
+        id: clang
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: deps/clang
+          key: chromium-clang-mac-arm64-${{ hashFiles('cmake/FindClang.cmake') }}-23
+
+      - name: Build the bundle
+        run: ios/scripts/build_deps.sh "$RUNNER_TEMP/deps.tar.gz"
+
+      - name: Save clang
+        if: always() && steps.clang.outputs.cache-hit != 'true' && hashFiles('deps/clang/bin/clang') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: deps/clang
+          key: chromium-clang-mac-arm64-${{ hashFiles('cmake/FindClang.cmake') }}-23
+
+      - name: Hand the bundle on
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-deps
+          path: ${{ runner.temp }}/deps.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
+  deps-publish:
+    name: Keep the deps bundle
+    needs: [ deps-lookup, deps-build ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Take the bundle
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ios-deps
+          path: ${{ runner.temp }}/deps
+
+      - name: Publish the bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "iOS deps bundle for the ntgcalls iOS port: FFmpeg and Boost.JSON, device and simulator, arm64."
+            echo "Built by ios/scripts/build_deps.sh at ${GITHUB_SHA}."
+          } > "$RUNNER_TEMP/notes.md"
+          cp "$RUNNER_TEMP/deps/deps.tar.gz" "$RUNNER_TEMP/${{ needs.deps-lookup.outputs.asset }}"
+          ios/scripts/release.sh ensure '${{ needs.deps-lookup.outputs.tag }}' "$RUNNER_TEMP/notes.md"
+          ios/scripts/release.sh upload '${{ needs.deps-lookup.outputs.tag }}' "$RUNNER_TEMP/${{ needs.deps-lookup.outputs.asset }}"
+
+  framework:
+    name: Framework
+    needs: [ deps-lookup, deps-build ]
+    if: ${{ !cancelled() && (needs.deps-lookup.outputs.found == 'true' || needs.deps-build.result == 'success') }}
+    runs-on: macos-26
+    timeout-minutes: 300
+    outputs:
+      simulator: ${{ steps.sim.outcome }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # ThirdPartyNotices.cmake reads the licences of the submodules.
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Restore clang
+        id: clang
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: deps/clang
+          key: chromium-clang-mac-arm64-${{ hashFiles('cmake/FindClang.cmake') }}-23
+
+      - name: Take the deps bundle
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ios-deps
+          path: ${{ runner.temp }}/deps-download
+
+      - name: Unpack the deps bundle
+        run: |
+          mkdir -p "$RUNNER_TEMP/deps"
+          tar -xzf "$RUNNER_TEMP/deps-download/deps.tar.gz" -C "$RUNNER_TEMP/deps"
+          cat "$RUNNER_TEMP/deps/BUILD.txt"
+
+      - name: Build the device slice
+        run: ios/scripts/build_slice.sh iphoneos "$RUNNER_TEMP/deps" "$RUNNER_TEMP/out"
+
+      - name: Check webrtc.ios.tar.gz against its pin
+        run: |
+          expected="$(awk '$2 == "webrtc.ios.tar.gz" {print $1}' ios/pins.sha256)"
+          actual="$(shasum -a 256 deps/libwebrtc/download/webrtc.ios.tar.gz | awk '{print $1}')"
+          echo "webrtc.ios.tar.gz $actual"
+          [ "$expected" = "$actual" ]
+
+      - name: Gate G0, device
+        id: g0_device
+        run: |
+          set -o pipefail
+          ios/scripts/check_slice.sh iphoneos "$RUNNER_TEMP/out/iphoneos" | tee "$RUNNER_TEMP/g0-iphoneos.txt"
+
+      - name: Build the simulator slice (retagged WebRTC)
+        id: sim
+        continue-on-error: true
+        run: ios/scripts/build_slice.sh iphonesimulator "$RUNNER_TEMP/deps" "$RUNNER_TEMP/out"
+
+      - name: Save clang
+        if: always() && steps.clang.outputs.cache-hit != 'true' && hashFiles('deps/clang/bin/clang') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: deps/clang
+          key: chromium-clang-mac-arm64-${{ hashFiles('cmake/FindClang.cmake') }}-23
+
+      - name: Stub the simulator slice
+        if: steps.sim.outcome == 'failure'
+        run: |
+          echo "The retagged simulator build failed; the simulator slice is a stub that answers 'not built'."
+          ios/scripts/stub_slice.sh iphonesimulator "$RUNNER_TEMP/out/iphoneos/ntgcalls.framework/Headers/ntgcalls.h" "$RUNNER_TEMP/out"
+
+      - name: Gate G0, simulator
+        id: g0_sim
+        run: |
+          set -o pipefail
+          ios/scripts/check_slice.sh iphonesimulator "$RUNNER_TEMP/out/iphonesimulator" | tee "$RUNNER_TEMP/g0-iphonesimulator.txt"
+
+      - name: Assemble the xcframework
+        run: |
+          out="$RUNNER_TEMP/out"
+          xcodebuild -create-xcframework \
+            -framework "$out/iphoneos/ntgcalls.framework" -debug-symbols "$out/iphoneos/ntgcalls.framework.dSYM" \
+            -framework "$out/iphonesimulator/ntgcalls.framework" -debug-symbols "$out/iphonesimulator/ntgcalls.framework.dSYM" \
+            -output "$out/ntgcalls.xcframework"
+          # The device slice's notices carry the iOS section (package_framework.sh).
+          cp "$out/iphoneos/ntgcalls.framework/LICENSE" "$out/iphoneos/ntgcalls.framework/THIRD_PARTY_NOTICES.md" "$out/ntgcalls.xcframework/"
+          # Each slice must carry its framework, privacy manifest and dSYM.
+          for slice in ios-arm64 ios-arm64-simulator; do
+            test -f "$out/ntgcalls.xcframework/$slice/ntgcalls.framework/ntgcalls"
+            test -f "$out/ntgcalls.xcframework/$slice/ntgcalls.framework/PrivacyInfo.xcprivacy"
+            test -d "$out/ntgcalls.xcframework/$slice/dSYMs/ntgcalls.framework.dSYM"
+          done
+          (cd "$out" && ditto -c -k --sequesterRsrc --keepParent ntgcalls.xcframework ntgcalls.xcframework.zip)
+          (cd "$out" && shasum -a 256 ntgcalls.xcframework.zip | tee ntgcalls.xcframework.zip.sha256)
+          ls -l "$out"
+
+      - name: Write the report
+        if: always()
+        run: |
+          out="$RUNNER_TEMP/out"
+          mkdir -p "$out"
+          report="$out/ios-build-report.md"
+          {
+            echo "# ntgcalls iOS build"
+            echo
+            echo "- commit: ${GITHUB_SHA}"
+            echo "- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "- version: $(cat "$out/iphoneos/VERSION" 2>/dev/null || echo none)"
+            echo "- xcode: $(xcodebuild -version | sed -n 1p), iOS SDK $(xcrun --sdk iphoneos --show-sdk-version)"
+            echo "- deps: ${{ needs.deps-lookup.outputs.tag }}"
+            echo "- simulator slice: $([ '${{ steps.sim.outcome }}' = success ] && echo 'built (retagged WebRTC)' || echo 'stub (not built)')"
+            echo "- xcframework.zip sha256: $(awk '{print $1}' "$out/ntgcalls.xcframework.zip.sha256" 2>/dev/null || echo none)"
+            echo "- xcframework.zip size: $(stat -f %z "$out/ntgcalls.xcframework.zip" 2>/dev/null || echo none) bytes"
+            for sdk in iphoneos iphonesimulator; do
+              echo
+              echo "## G0, $sdk"
+              echo
+              echo '```'
+              cat "$RUNNER_TEMP/g0-$sdk.txt" 2>/dev/null || echo "not run"
+              echo '```'
+            done
+          } > "$report"
+          cat "$report"
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Hand the framework on
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-framework
+          path: |
+            ${{ runner.temp }}/out/ntgcalls.xcframework.zip
+            ${{ runner.temp }}/out/ntgcalls.xcframework.zip.sha256
+            ${{ runner.temp }}/out/ios-build-report.md
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+
+  publish:
+    name: Publish the framework
+    needs: [ framework ]
+    # Only a build that passed G0 on both slices, with the real (retagged) simulator slice.
+    # A condition without a status function gets an implicit success() over every job this one
+    # depends on, directly or not, and deps-build is skipped whenever the bundle already exists.
+    # So the condition names the results it needs.
+    if: ${{ !cancelled() && needs.framework.result == 'success' && needs.framework.outputs.simulator == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Take the framework
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ios-framework
+          path: ${{ runner.temp }}/framework
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(sed -n 's/.*project(ntgcalls VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          port="$(sed -n 's/^version.ios_port=//p' version.properties)"
+          tag="ios-v${version}-p${port}"
+          in="$RUNNER_TEMP/framework"
+          (cd "$in" && shasum -a 256 -c ntgcalls.xcframework.zip.sha256)
+          ios/scripts/release.sh keep "$GITHUB_SHA"
+          ios/scripts/release.sh ensure "$tag" "$in/ios-build-report.md"
+          ios/scripts/release.sh upload "$tag" "$in/ios-build-report.md"
+          ios/scripts/release.sh upload "$tag" "$in/ntgcalls.xcframework.zip"
+          ios/scripts/release.sh upload "$tag" "$in/ntgcalls.xcframework.zip.sha256"
