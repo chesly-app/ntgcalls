@@ -3,8 +3,8 @@
 This branch (`ios-port`) ports ntgcalls 3.0.6 to iOS: iPhone devices and the arm64 iPhone
 simulator. It is a modified version of [pytgcalls/ntgcalls](https://github.com/pytgcalls/ntgcalls),
 made by Chesly in November 2026 and distributed under the same licence, LGPL-3.0 (`LICENSE`).
-Third-party components and their licences are in `THIRD_PARTY_NOTICES.md`. Every change is
-marked in the source with an `iOS port` comment and listed below.
+Third-party components and their licences are in `THIRD_PARTY_NOTICES.md`. Every changed file is
+listed below, and the source changes carry an `iOS port` comment wherever a line needs explaining.
 
 ## What it produces
 
@@ -66,7 +66,8 @@ its dSYM (`-debug-symbols`), an `Info.plist`, a privacy manifest and the licence
 | `ntgcalls/src/media/devices/media_device.cpp`, `desktop_capturer_module.*`, `camera_capturer_module.*` | no desktop capture or camera module on iOS |
 | `ntgcalls/include/ntgcalls/utils/hardware_info.hpp`, `ntgcalls/src/utils/hardware_info.cpp` | iOS uses the macOS CPU accounting |
 | `ntgcalls/src/instances/p2p_call.cpp` | no key fingerprint in the iOS log |
-| new `ios/`, `.github/workflows/ios.yml` | build scripts, checks and the workflow |
+| new `ios/`, `.github/workflows/ios.yml` | build scripts, checks, gate G1 and the workflow |
+| `README.md`, new `IOS_PORT.md` | the notice that this is a modified version |
 
 ## Building
 
