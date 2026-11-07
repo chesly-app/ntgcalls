@@ -51,7 +51,13 @@ case "$1" in
         ;;
     upload)
         name="${4:-$(basename "$3")}"
-        found="$(release_json "$2")"
+        # A draft made a moment ago can take a few seconds to reach the listing.
+        found=""
+        for _ in 1 2 3 4 5 6 7 8; do
+            found="$(release_json "$2")"
+            [ -n "$found" ] && break
+            sleep 5
+        done
         [ -n "$found" ] || { echo "no release $2" >&2; exit 1; }
         id="$(echo "$found" | jq -r .id)"
         old="$(echo "$found" | jq -r --arg name "$name" '.assets[]? | select(.name == $name) | .id')"

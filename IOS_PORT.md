@@ -88,6 +88,12 @@ The workflow `.github/workflows/ios.yml` builds everything on a GitHub macOS run
 4. **xcframework**: `xcodebuild -create-xcframework` with both dSYMs, zipped for SwiftPM, with
    its SHA-256.
 
+5. **Gate G1** (`ios/g1`), on the simulator: in one process, the WebRTC build LiveKit's Swift SDK
+   2.19.0 pins makes an offer while two ntgcalls instances run the full key exchange and a P2P
+   connection, then carry a sine wave both ways for 60 seconds. Both ends must hear audio and
+   show the same four emojis, and no log line may carry the key fingerprint. The simulator slice
+   is retagged, so this is weak evidence for a device.
+
 To build by hand on a Mac with Xcode, CMake and Ninja:
 
 ```sh

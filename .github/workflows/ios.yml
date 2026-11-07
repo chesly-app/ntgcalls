@@ -235,3 +235,36 @@ jobs:
             ios/scripts/release.sh upload "$tag" "$out/ntgcalls.xcframework.zip"
             ios/scripts/release.sh upload "$tag" "$out/ntgcalls.xcframework.zip.sha256"
           fi
+
+  g1:
+    name: Gate G1 (simulator, beside LiveKit's WebRTC)
+    needs: framework
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+
+      - name: Fetch the framework
+        run: |
+          version="$(sed -n 's/.*project(ntgcalls VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+          port="$(sed -n 's/^version.ios_port=//p' version.properties)"
+          ios/scripts/release.sh download "ios-v${version}-p${port}" ntgcalls.xcframework.zip "$RUNNER_TEMP/framework.zip"
+          unzip -q "$RUNNER_TEMP/framework.zip" -d ios/g1
+
+      - name: Run the test
+        working-directory: ios/g1
+        run: |
+          set -o pipefail
+          udid="$(xcrun simctl list devices available -j | jq -r '[.devices | to_entries[] | select(.key | test("iOS")) | .value[] | select(.name | test("iPhone"))][0].udid')"
+          echo "simulator $udid"
+          xcodebuild -list -json | tee "$RUNNER_TEMP/list.json"
+          scheme="$(jq -r '[.workspace.schemes[] | select(endswith("-Package"))][0] // "G1Support"' "$RUNNER_TEMP/list.json")"
+          echo "scheme $scheme"
+          xcodebuild test -scheme "$scheme" -destination "platform=iOS Simulator,id=${udid}" \
+            | tee "$RUNNER_TEMP/g1.log" | grep -E --line-buffered 'Test Case|Test Suite|error:|ntgcalls |emojis |connected|heard|log lines|\*\* TEST'
