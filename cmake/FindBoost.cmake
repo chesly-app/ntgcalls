@@ -13,7 +13,41 @@ if (ANDROID)
     set(BOOST_LIB_DIR ${BOOST_LIB_DIR}/${ANDROID_ABI})
 endif ()
 
-if (LINUX_ARM64)
+if (IOS)
+    # iOS port: pytgcalls/boost publishes no iOS build. Boost.JSON, the only compiled part used
+    # here, comes per slice from the iOS deps bundle (ios/deps), built against the same Chromium
+    # libc++ headers as this library (std::__Cr); ios/scripts/build_deps.sh fails a bundle that
+    # references the SDK's std::__1, and G0 check 14 fails a framework that imports it.
+    # Boost::process stays off, as on Android: iOS cannot spawn.
+    if (NOT NTG_IOS_DEPS)
+        message(FATAL_ERROR "iOS needs -DNTG_IOS_DEPS=<dir> with boost/ and ffmpeg/ for this slice")
+    endif ()
+    set(BOOST_SRC ${NTG_IOS_DEPS}/boost)
+    set(BOOST_LIB_DIR ${BOOST_SRC}/lib)
+    if (NOT EXISTS ${BOOST_LIB_DIR}/${BOOST_JSON_LIB})
+        message(FATAL_ERROR "Missing ${BOOST_LIB_DIR}/${BOOST_JSON_LIB}")
+    endif ()
+    # The bundle records the libc++ it was built against (ios/deps); it must be this archive's.
+    if (NOT LIBCXX_COMMIT OR NOT EXISTS ${BOOST_SRC}/libcxx.txt)
+        message(FATAL_ERROR "No libc++ record to check: LIBCXX_COMMIT='${LIBCXX_COMMIT}', ${BOOST_SRC}/libcxx.txt")
+    endif ()
+    file(READ ${BOOST_SRC}/libcxx.txt _NTG_BOOST_LIBCXX)
+    set(_NTG_ARCHIVE_LIBCXX "LIBCXX_COMMIT=${LIBCXX_COMMIT}\nLIBCXX_ABI_COMMIT=${LIBCXX_ABI_COMMIT}\nBUILDTOOLS_COMMIT=${BUILDTOOLS_COMMIT}\n")
+    if (NOT "${_NTG_BOOST_LIBCXX}" STREQUAL "${_NTG_ARCHIVE_LIBCXX}")
+        message(FATAL_ERROR "The iOS deps bundle's Boost.JSON was built against another libc++ than the WebRTC archive's; bump version.ios_deps.\nbundle:\n${_NTG_BOOST_LIBCXX}archive:\n${_NTG_ARCHIVE_LIBCXX}")
+    endif ()
+    add_compile_definitions(BOOST_ALL_NO_LIB)
+    message(STATUS "boost (iOS deps bundle) ${BOOST_SRC}")
+    if (NOT TARGET Boost::json)
+        add_library(Boost::json STATIC IMPORTED GLOBAL)
+        set_target_properties(Boost::json PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${BOOST_SRC}/include"
+            IMPORTED_LINK_INTERFACE_LANGUAGES CXX
+            IMPORTED_LOCATION "${BOOST_LIB_DIR}/${BOOST_JSON_LIB}"
+        )
+    endif ()
+    return()
+elseif (LINUX_ARM64)
     set(PLATFORM linux)
     set(ARCHIVE_FORMAT .tar.gz)
     set(ARCH arm64)

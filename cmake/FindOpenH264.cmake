@@ -4,7 +4,12 @@ set(OPENH264_GIT https://github.com/pytgcalls/openh264)
 set(OPENH264_LIB ${CMAKE_STATIC_LIBRARY_PREFIX}openh264${CMAKE_STATIC_LIBRARY_SUFFIX})
 
 if(NOT TARGET cisco::OpenH264)
-    if (LINUX_ARM64)
+    if (IOS)
+        # iOS port: not built. A source-built OpenH264 carries no Cisco patent licence, and the
+        # iPhone has VP8, VP9 and AV1 from WebRTC instead.
+        message(STATUS "OpenH264 is not built for iOS")
+        return()
+    elseif (LINUX_ARM64)
         set(PLATFORM linux)
         set(ARCHIVE_FORMAT .tar.gz)
         set(ARCH arm64)

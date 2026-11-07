@@ -1,5 +1,9 @@
 set(cmake_dir ${CMAKE_CURRENT_LIST_DIR})
-if(WIN32)
+if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # iOS port: iPhone device or iPhone simulator, both arm64.
+    # Checked first: an iOS cross build also matches the UNIX AND APPLE branch below.
+    set(OS_NAME IOS)
+elseif(WIN32)
     set(OS_NAME WINDOWS)
 elseif (UNIX AND NOT APPLE)
     if (ANDROID_ABI)
@@ -45,6 +49,8 @@ function(setup_platform_flags target_name import_libraries)
         include(${cmake_dir}/Linux.cmake)
     elseif (MACOS)
         include(${cmake_dir}/macOS.cmake)
+    elseif (IOS)
+        include(${cmake_dir}/iOS.cmake)
     else()
         message(FATAL_ERROR "${CMAKE_SYSTEM_NAME} with ${OS_ARCH} is not supported yet")
     endif ()
@@ -163,7 +169,7 @@ function(bundle_static_library tgt_name bundled_tgt_name bundle_output_dir)
             OUTPUT ${bundled_tgt_full_name}
             VERBATIM
         )
-    elseif (MACOS)
+    elseif (MACOS OR IOS)
         find_program(lib_tool libtool)
         set(ar_tool ${lib_tool})
 

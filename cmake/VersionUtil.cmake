@@ -69,6 +69,17 @@ if (NOT ANDROID_TAGS AND NOT GITHUB_TAGS AND NOT PYPI_TAGS)
     endif()
 endif ()
 
+if (IOS AND DEFINED CMAKE_PARENT_LIST_FILE)
+    # iOS port: ntg_get_version() names the port revision and the commit,
+    # so a log line or a crash breadcrumb tells this build from every other ntgcalls build.
+    GetProperty("version.ios_port" IOS_PORT_REVISION)
+    if (VERSION_NAME MATCHES "\\+")
+        set(VERSION_NAME "${VERSION_NAME}.ios.${IOS_PORT_REVISION}")
+    else ()
+        set(VERSION_NAME "${VERSION_NAME}+ios.${IOS_PORT_REVISION}.${GIT_COMMIT}")
+    endif ()
+endif ()
+
 if(DEFINED CMAKE_PARENT_LIST_FILE)
     add_compile_definitions(NTG_VERSION="${VERSION_NAME}")
 else ()
