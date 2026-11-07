@@ -6,6 +6,13 @@ import LiveKitWebRTC
 import XCTest
 
 final class CoexistenceTests: XCTestCase {
+    /// One store for the whole process: ntgcalls keeps logging after a test ends.
+    private static let logs: LogStore = {
+        let store = LogStore()
+        store.install()
+        return store
+    }()
+
     /// Any 2048-bit modulus serves here: the test needs both ends to agree, not a safe prime.
     private let prime = [UInt8](repeating: 0xFF, count: 256)
 
@@ -42,13 +49,8 @@ final class CoexistenceTests: XCTestCase {
         connection.close()
     }
 
-    func testEngineBesideLiveKit() throws {
-        print("ntgcalls \(engineVersion())")
-        XCTAssertTrue(engineVersion().contains("+ios."))
-
-        let logs = LogStore()
-        logs.install()
-
+    /// Two ends through the whole key exchange. Returns them with the key fingerprint.
+    private func exchangedPair() throws -> (caller: CallSide, callee: CallSide, fingerprint: Int64) {
         let caller = try CallSide(name: "caller")
         let callee = try CallSide(name: "callee")
         caller.peer = callee
@@ -62,6 +64,15 @@ final class CoexistenceTests: XCTestCase {
         let callerAuth = try caller.exchangeKeys(gB, fingerprint: 0)
         let calleeAuth = try callee.exchangeKeys(callerAuth.gAOrB, fingerprint: callerAuth.fingerprint)
         XCTAssertEqual(callerAuth.fingerprint, calleeAuth.fingerprint)
+        return (caller, callee, callerAuth.fingerprint)
+    }
+
+    func testEngineBesideLiveKit() throws {
+        print("ntgcalls \(engineVersion())")
+        XCTAssertTrue(engineVersion().contains("+ios."))
+
+        let logs = Self.logs
+        let (caller, callee, fingerprint) = try exchangedPair()
 
         let callerEmojis = try caller.emojis()
         let calleeEmojis = try callee.emojis()
@@ -70,8 +81,8 @@ final class CoexistenceTests: XCTestCase {
         XCTAssertEqual(callerEmojis, calleeEmojis)
         XCTAssertEqual(callerEmojis.count, 4)
 
-        try caller.connect()
-        try callee.connect()
+        try caller.connect(allowLocal: true)
+        try callee.connect(allowLocal: true)
 
         try makeLiveKitOffer()
 
@@ -97,9 +108,7 @@ final class CoexistenceTests: XCTestCase {
         caller.stop()
         callee.stop()
 
-        let fingerprints = [
-            String(callerAuth.fingerprint), String(UInt64(bitPattern: callerAuth.fingerprint)),
-        ]
+        let fingerprints = [String(fingerprint), String(UInt64(bitPattern: fingerprint))]
         let lines = logs.snapshot()
         print("\(lines.count) log lines")
         for line in lines {
@@ -107,5 +116,25 @@ final class CoexistenceTests: XCTestCase {
                 XCTAssertFalse(line.contains(fingerprint), "a log line carries the key fingerprint")
             }
         }
+    }
+
+    /// The local network filter, on by default: the caller offers its local addresses, and the
+    /// callee, the iPhone in this test, neither tries them nor offers its own, so no path exists.
+    func testLocalAddressesStayOut() throws {
+        let logs = Self.logs
+        let (caller, callee, _) = try exchangedPair()
+
+        try caller.connect(allowLocal: true)
+        try callee.connect(allowLocal: false)
+
+        try wait("the callee to drop a local candidate", timeout: 15) {
+            logs.snapshot().contains { $0.contains("Not adding a remote candidate on the local network") }
+        }
+        Thread.sleep(forTimeInterval: 5)
+        XCTAssertFalse(caller.isConnected)
+        XCTAssertFalse(callee.isConnected)
+
+        caller.stop()
+        callee.stop()
     }
 }

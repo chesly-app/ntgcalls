@@ -95,11 +95,6 @@ jobs:
     needs: deps
     runs-on: macos-26
     timeout-minutes: 300
-    env:
-      CCACHE_DIR: ${{ github.workspace }}/../ccache
-      CCACHE_BASEDIR: ${{ github.workspace }}
-      CCACHE_COMPILERCHECK: content
-      CCACHE_MAXSIZE: 6G
     steps:
       - name: Check out
         uses: actions/checkout@v7
@@ -113,22 +108,12 @@ jobs:
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
 
-      - name: Install ccache
-        run: brew install ccache
-
       - name: Restore clang
         id: clang
         uses: actions/cache/restore@v6
         with:
           path: deps/clang
           key: chromium-clang-mac-arm64-${{ hashFiles('cmake/FindClang.cmake') }}-23
-
-      - name: Restore ccache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ github.workspace }}/../ccache
-          key: ccache-ios-${{ github.sha }}-${{ github.run_attempt }}
-          restore-keys: ccache-ios-
 
       - name: Fetch the deps bundle
         run: |
@@ -165,13 +150,6 @@ jobs:
           path: deps/clang
           key: chromium-clang-mac-arm64-${{ hashFiles('cmake/FindClang.cmake') }}-23
 
-      - name: Save ccache
-        if: always()
-        uses: actions/cache/save@v6
-        with:
-          path: ${{ github.workspace }}/../ccache
-          key: ccache-ios-${{ github.sha }}-${{ github.run_attempt }}
-
       - name: Stub the simulator slice
         if: steps.sim.outcome == 'failure'
         run: |
@@ -192,6 +170,12 @@ jobs:
             -framework "$out/iphonesimulator/ntgcalls.framework" -debug-symbols "$out/iphonesimulator/ntgcalls.framework.dSYM" \
             -output "$out/ntgcalls.xcframework"
           cp LICENSE THIRD_PARTY_NOTICES.md "$out/ntgcalls.xcframework/"
+          # Each slice must carry its framework, privacy manifest and dSYM.
+          for slice in ios-arm64 ios-arm64-simulator; do
+            test -f "$out/ntgcalls.xcframework/$slice/ntgcalls.framework/ntgcalls"
+            test -f "$out/ntgcalls.xcframework/$slice/ntgcalls.framework/PrivacyInfo.xcprivacy"
+            test -d "$out/ntgcalls.xcframework/$slice/dSYMs/ntgcalls.framework.dSYM"
+          done
           (cd "$out" && ditto -c -k --sequesterRsrc --keepParent ntgcalls.xcframework ntgcalls.xcframework.zip)
           (cd "$out" && shasum -a 256 ntgcalls.xcframework.zip | tee ntgcalls.xcframework.zip.sha256)
           ls -l "$out"

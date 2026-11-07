@@ -22,10 +22,6 @@ case "$sdk" in
 esac
 
 build="$root/build/$sdk"
-launcher=()
-if command -v ccache >/dev/null; then
-    launcher=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
-fi
 
 echo "::group::Configure ${sdk}"
 rm -rf "$build" "$root/shared-output"
@@ -38,8 +34,7 @@ cmake -S "$root" -B "$build" -G Ninja \
     -DCMAKE_SYSTEM_NAME=iOS \
     -DCMAKE_OSX_ARCHITECTURES=arm64 \
     -DNTG_IOS_SIMULATOR="$simulator" \
-    -DNTG_IOS_DEPS="$deps/$sdk" \
-    ${launcher[@]+"${launcher[@]}"}
+    -DNTG_IOS_DEPS="$deps/$sdk"
 echo "::endgroup::"
 
 echo "::group::Build ${sdk}"

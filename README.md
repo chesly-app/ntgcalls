@@ -1,3 +1,6 @@
+> **This is a fork.** The `ios-port` branch is a modified version of ntgcalls with an iOS port,
+> made by Chesly in November 2026 under the same licence. See [`IOS_PORT.md`](IOS_PORT.md).
+
 <img src="https://raw.githubusercontent.com/pytgcalls/ntgcalls/master/.github/images/banner.png" alt="pytgcalls logo" />
 <p align="center">
     <b>A Native Implementation of Telegram Calls in a seamless way.</b>

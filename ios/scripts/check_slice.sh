@@ -10,6 +10,7 @@
 #  4 only system libraries linked   10 no debug map (N_OSO) in the shipped binary
 #  5 only _ntg_* exported           11 header identical to the release header
 #  6 no defined weak external       12 version string, Info.plist, privacy manifest
+#                                   13 software video factories linked, OpenH264 not
 #
 # Usage: check_slice.sh <iphoneos|iphonesimulator> <slice dir>
 set -uo pipefail
@@ -97,6 +98,17 @@ check "version string" "$(strings -a "$bin" | grep -Fx "$version" >/dev/null && 
 check "Info.plist" "$(plutil -lint -s "$fw/Info.plist" >/dev/null && echo ok)" "$(plutil -extract CFBundleShortVersionString raw "$fw/Info.plist" 2>/dev/null) ($(plutil -extract CFBundleVersion raw "$fw/Info.plist" 2>/dev/null)), $(plutil -extract NTGCallsVersion raw "$fw/Info.plist" 2>/dev/null)"
 reasons="$(plutil -convert json -o - "$fw/PrivacyInfo.xcprivacy" 2>/dev/null | python3 -I -c 'import json,sys; d=json.load(sys.stdin); print(" ".join(t["NSPrivacyAccessedAPIType"].replace("NSPrivacyAccessedAPICategory","")+"="+",".join(t["NSPrivacyAccessedAPITypeReasons"]) for t in d["NSPrivacyAccessedAPITypes"]) or "none")' 2>/dev/null)"
 check "privacy manifest" "$([ -n "$reasons" ] && echo ok)" "${reasons:-unreadable}"
+
+# 13: read from the dSYM's symbol table, since the shipped binary keeps only its exports.
+if [[ "$version" != *.stub ]]; then
+    symbols="$(nm "$dwarf" 2>/dev/null)"
+    missing=""
+    for name in CreateVp8Encoder VP9Decoder CreateLibaomAv1Encoder CreateDav1dDecoder; do
+        echo "$symbols" | grep "$name" >/dev/null || missing="$missing $name"
+    done
+    h264="$(echo "$symbols" | grep -c -E 'WelsCreate|openh264' || true)"
+    check "video factories" "$([ -z "$missing" ] && [ "$h264" -eq 0 ] && echo ok)" "missing:${missing:- none}; OpenH264 symbols: $h264"
+fi
 
 size="$(stat -f %z "$bin")"
 echo "INFO size: $size bytes ($((size / 1048576)) MiB) stripped binary"

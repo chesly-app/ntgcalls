@@ -84,15 +84,18 @@ The workflow `.github/workflows/ios.yml` builds everything on a GitHub macOS run
    iOS, install name, system libraries only, only `_ntg_*` exported, no defined weak external,
    no ObjC class or category, no `AVAudioSession` or AVFoundation import, dSYM with matching
    UUID, no debug map in the shipped binary, the header identical to the release header, the
-   version string, `Info.plist` and the privacy manifest.
+   version string, `Info.plist`, the privacy manifest, and the software video factories linked
+   without OpenH264.
 4. **xcframework**: `xcodebuild -create-xcframework` with both dSYMs, zipped for SwiftPM, with
    its SHA-256.
 
 5. **Gate G1** (`ios/g1`), on the simulator: in one process, the WebRTC build LiveKit's Swift SDK
    2.19.0 pins makes an offer while two ntgcalls instances run the full key exchange and a P2P
    connection, then carry a sine wave both ways for 60 seconds. Both ends must hear audio and
-   show the same four emojis, and no log line may carry the key fingerprint. The simulator slice
-   is retagged, so this is weak evidence for a device.
+   show the same four emojis, and no log line may carry the key fingerprint. A second test runs
+   the local network filter: with it on at one end, that end drops the local candidates it is
+   offered and the call finds no path. The simulator slice is retagged, so all of this is weak
+   evidence for a device.
 
 To build by hand on a Mac with Xcode, CMake and Ninja:
 

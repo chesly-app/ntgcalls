@@ -214,7 +214,9 @@ public final class CallSide {
         }
     }
 
-    public func connect() throws {
+    /// `allowLocal` is the test switch for the iOS filter: two ends on one machine reach each other
+    /// only over local addresses, which the filter keeps out of a real call.
+    public func connect(allowLocal: Bool) throws {
         try perform {
             var protocolInfo = ntg_protocol()
             try checked(ntg_get_protocol(&protocolInfo), "get_protocol")
@@ -222,7 +224,7 @@ public final class CallSide {
             let versions = (0..<protocolInfo.library_versions_len).map {
                 UnsafePointer<CChar>(protocolInfo.library_versions[$0])
             }
-            let parameters = "{\"network_allow_local_addresses\":true}"
+            let parameters = "{\"network_allow_local_addresses\":\(allowLocal)}"
             try versions.withUnsafeBufferPointer { list in
                 try parameters.withCString { json in
                     try checked(
